@@ -9,6 +9,11 @@
 		A10000000000000000000001 /* MacICNSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* MacICNSApp.swift */; };
 		A10000000000000000000002 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* main.swift */; };
 		A10000000000000000000003 /* MacICNSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* MacICNSTests.swift */; };
+		A20000000000000000000001 /* IconMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* IconMapping.swift */; };
+		A20000000000000000000002 /* MappingStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* MappingStatus.swift */; };
+		A20000000000000000000003 /* MappingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* MappingRepository.swift */; };
+		A20000000000000000000004 /* JSONMappingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* JSONMappingRepository.swift */; };
+		A20000000000000000000005 /* JSONMappingRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* JSONMappingRepositoryTests.swift */; };
 		A10000000000000000000004 /* com.guigx.macicns.helper in Copy Helper */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* com.guigx.macicns.helper */; };
 		A10000000000000000000005 /* com.guigx.macicns.helper.plist in Copy LaunchDaemon */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* com.guigx.macicns.helper.plist */; };
 /* End PBXBuildFile section */
@@ -28,6 +33,11 @@
 		A10000000000000000000012 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		A10000000000000000000013 /* MacICNSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacICNSTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000014 /* com.guigx.macicns.helper.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = com.guigx.macicns.helper.plist; sourceTree = "<group>"; };
+		A20000000000000000000011 /* IconMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconMapping.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* MappingStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MappingStatus.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* MappingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MappingRepository.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 /* JSONMappingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONMappingRepository.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* JSONMappingRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONMappingRepositoryTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000015 /* MacICNS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacICNS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000021 /* com.guigx.macicns.helper */ = {isa = PBXFileReference; explicitFileType = compiled.mach-o.executable; includeInIndex = 0; path = com.guigx.macicns.helper; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000022 /* MacICNSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacICNSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -41,13 +51,15 @@
 
 /* Begin PBXGroup section */
 		A10000000000000000000041 = {isa = PBXGroup; children = (A10000000000000000000042 /* MacICNS */, A10000000000000000000043 /* MacICNSHelper */, A10000000000000000000044 /* MacICNSTests */, A10000000000000000000045 /* Resources */, A10000000000000000000046 /* Products */,); sourceTree = "<group>"; };
-		A10000000000000000000042 /* MacICNS */ = {isa = PBXGroup; children = (A10000000000000000000047 /* App */,); path = MacICNS; sourceTree = "<group>"; };
+		A10000000000000000000042 /* MacICNS */ = {isa = PBXGroup; children = (A10000000000000000000047 /* App */, A20000000000000000000021 /* Domain */, A20000000000000000000022 /* Data */,); path = MacICNS; sourceTree = "<group>"; };
 		A10000000000000000000043 /* MacICNSHelper */ = {isa = PBXGroup; children = (A10000000000000000000012 /* main.swift */); path = MacICNSHelper; sourceTree = "<group>"; };
-		A10000000000000000000044 /* MacICNSTests */ = {isa = PBXGroup; children = (A10000000000000000000013 /* MacICNSTests.swift */); path = MacICNSTests; sourceTree = "<group>"; };
+		A10000000000000000000044 /* MacICNSTests */ = {isa = PBXGroup; children = (A10000000000000000000013 /* MacICNSTests.swift */, A20000000000000000000015 /* JSONMappingRepositoryTests.swift */,); path = MacICNSTests; sourceTree = "<group>"; };
 		A10000000000000000000045 /* Resources */ = {isa = PBXGroup; children = (A10000000000000000000048 /* LaunchDaemons */,); path = Resources; sourceTree = "<group>"; };
 		A10000000000000000000046 /* Products */ = {isa = PBXGroup; children = (A10000000000000000000015 /* MacICNS.app */, A10000000000000000000021 /* com.guigx.macicns.helper */, A10000000000000000000022 /* MacICNSTests.xctest */); name = Products; sourceTree = "<group>"; };
 		A10000000000000000000047 /* App */ = {isa = PBXGroup; children = (A10000000000000000000011 /* MacICNSApp.swift */); path = App; sourceTree = "<group>"; };
 		A10000000000000000000048 /* LaunchDaemons */ = {isa = PBXGroup; children = (A10000000000000000000014 /* com.guigx.macicns.helper.plist */); path = LaunchDaemons; sourceTree = "<group>"; };
+		A20000000000000000000021 /* Domain */ = {isa = PBXGroup; children = (A20000000000000000000011 /* IconMapping.swift */, A20000000000000000000012 /* MappingStatus.swift */,); path = Domain; sourceTree = "<group>"; };
+		A20000000000000000000022 /* Data */ = {isa = PBXGroup; children = (A20000000000000000000013 /* MappingRepository.swift */, A20000000000000000000014 /* JSONMappingRepository.swift */,); path = Data; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -64,9 +76,9 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A10000000000000000000091 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* MacICNSApp.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000091 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* MacICNSApp.swift in Sources */, A20000000000000000000001 /* IconMapping.swift in Sources */, A20000000000000000000002 /* MappingStatus.swift in Sources */, A20000000000000000000003 /* MappingRepository.swift in Sources */, A20000000000000000000004 /* JSONMappingRepository.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 		A10000000000000000000092 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000002 /* main.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
-		A10000000000000000000093 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000003 /* MacICNSTests.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000093 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000003 /* MacICNSTests.swift in Sources */, A20000000000000000000005 /* JSONMappingRepositoryTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -77,7 +89,7 @@
 /* Begin XCBuildConfiguration section */
 		A100000000000000000000B0 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SWIFT_VERSION = 6.0; }; name = Debug; };
 		A100000000000000000000B1 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SWIFT_VERSION = 6.0; }; name = Release; };
-		A100000000000000000000C0 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MacICNS/App/Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = com.guigx.macicns; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SWIFT_VERSION = 6.0; }; name = Debug; };
+		A100000000000000000000C0 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; ENABLE_TESTABILITY = YES; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MacICNS/App/Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = com.guigx.macicns; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SWIFT_VERSION = 6.0; }; name = Debug; };
 		A100000000000000000000C1 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MacICNS/App/Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = com.guigx.macicns; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SWIFT_VERSION = 6.0; }; name = Release; };
 		A100000000000000000000D0 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MacICNSHelper/Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = com.guigx.macicns.helper; PRODUCT_NAME = com.guigx.macicns.helper; SDKROOT = macosx; SWIFT_VERSION = 6.0; }; name = Debug; };
 		A100000000000000000000D1 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MacICNSHelper/Info.plist; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = com.guigx.macicns.helper; PRODUCT_NAME = com.guigx.macicns.helper; SDKROOT = macosx; SWIFT_VERSION = 6.0; }; name = Release; };
