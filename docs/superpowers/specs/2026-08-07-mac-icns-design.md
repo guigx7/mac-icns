@@ -51,7 +51,7 @@ Runs a single deduplicated repair pipeline for mapping creation, filesystem even
 
 ## Repair Strategy
 
-The first release uses layered, user-session repair rather than a permanently privileged helper:
+The first release uses layered repair through the signed main app and its minimally privileged helper:
 
 1. Apply an icon immediately when the user creates or edits a mapping.
 2. Observe filesystem changes for mapped applications and their parent folders.
@@ -61,11 +61,11 @@ The first release uses layered, user-session repair rather than a permanently pr
 
 This combination covers normal update replacements while ensuring a later repair opportunity if a specific installer emits incomplete filesystem events.
 
-## Permissions
+## Privileged Helper and Permissions
 
-Changing an application in protected locations such as `/Applications` can require administrator access. The app requests authorization only for the operation that needs it and never stores passwords or elevated credentials.
+The first release includes a minimal privileged helper installed once with administrator approval through macOS Service Management. It runs only the narrowly defined icon-application operation requested by the signed main app through a validated IPC interface; it does not accept arbitrary shell commands, paths, or executable arguments.
 
-A permanent privileged helper is deliberately out of scope for version one. It may be introduced later through macOS Service Management if automatic repair in protected locations requires it.
+The helper makes automatic repair possible for protected locations such as `/Applications` without repeatedly requesting a password. The main app never stores passwords or elevated credentials. Settings shows the installation status and provides an explicit action to remove the helper.
 
 ## User Interface
 
@@ -90,5 +90,4 @@ Failures are isolated to the affected mapping. The UI displays actionable status
 
 ## Distribution Direction
 
-The project will be organized as a standard signed and notarizable macOS application. Future Homebrew Cask distribution will package the built `.app`; code signing and notarization configuration will be added before public release.
-
+The project will be organized as a standard signed and notarizable macOS application, including the helper's client-validation requirements. Future Homebrew Cask distribution will package the built `.app`; code signing and notarization configuration will be added before public release.
