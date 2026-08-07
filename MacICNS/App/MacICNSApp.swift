@@ -2,5 +2,12 @@ import SwiftUI
 
 @main
 struct MacICNSApp: App {
-    var body: some Scene { WindowGroup { Text("MacICNS") } }
+    @StateObject private var appState = AppState()
+
+    var body: some Scene {
+        WindowGroup {
+            MappingListView(appState: appState)
+                .task { appState.loadMappings() }
+        }
+    }
 }
