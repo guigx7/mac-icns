@@ -2,6 +2,6 @@ import XCTest
 
 final class MacICNSTests: XCTestCase {
     func testApplicationBootstraps() {
-        XCTAssertTrue(true)
+        XCTAssertEqual(Bundle.main.bundleIdentifier, "com.guigx.macicns")
     }
 }
