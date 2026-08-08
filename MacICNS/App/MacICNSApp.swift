@@ -7,7 +7,12 @@ struct MacICNSApp: App {
     var body: some Scene {
         WindowGroup {
             MappingListView(appState: appState)
-                .task { appState.loadMappings() }
+                .task {
+                    guard NSClassFromString("XCTestCase") == nil else {
+                        return
+                    }
+                    appState.loadMappings()
+                }
         }
     }
 }

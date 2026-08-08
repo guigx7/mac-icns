@@ -8,6 +8,13 @@ final class AppState: ObservableObject {
 
     private let repository: any MappingRepository
     private let repairCoordinator: RepairCoordinator
+    private lazy var monitor = MappingFileMonitor(repairCoordinator: repairCoordinator) { [weak self] mapping in
+        guard let self else {
+            return
+        }
+        self.replace(mapping)
+        self.saveMappings()
+    }
 
     init(
         repository: any MappingRepository = JSONMappingRepository(),
@@ -21,6 +28,9 @@ final class AppState: ObservableObject {
         do {
             mappings = try repository.load()
             persistenceError = nil
+            Task { [weak self] in
+                await self?.startMonitoringAndRepair()
+            }
         } catch {
             persistenceError = "Could not load saved mappings."
         }
@@ -34,6 +44,7 @@ final class AppState: ObservableObject {
         )
         mappings.append(mapping)
         saveMappings()
+        await monitor.start(mappings: mappings)
         await apply(mapping, reason: .mappingEdited)
     }
 
@@ -41,11 +52,18 @@ final class AppState: ObservableObject {
         let repairedMapping = await repairCoordinator.repair(mapping, reason: reason)
         replace(repairedMapping)
         saveMappings()
+        await monitor.start(mappings: mappings)
     }
 
     func removeMappings(at offsets: IndexSet) {
         mappings.remove(atOffsets: offsets)
         saveMappings()
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            await self.monitor.start(mappings: self.mappings)
+        }
     }
 
     func dismissPersistenceError() {
@@ -57,6 +75,13 @@ final class AppState: ObservableObject {
             return
         }
         mappings[index] = mapping
+    }
+
+    private func startMonitoringAndRepair() async {
+        await monitor.start(mappings: mappings)
+        mappings = await repairCoordinator.repairAll(reason: .launch)
+        saveMappings()
+        await monitor.start(mappings: mappings)
     }
 
     private func saveMappings() {
