@@ -5,6 +5,8 @@ actor RepairCoordinator {
     private let locator: any ApplicationLocating
     private let applier: any IconApplying
     private var activeRepairs: [UUID: Task<IconMapping, Never>] = [:]
+    private var mappingsByID: [UUID: IconMapping] = [:]
+    private var mappingOrder: [UUID] = []
 
     init(
         fingerprinting: any Fingerprinting = BundleFingerprinting(),
@@ -28,7 +30,36 @@ actor RepairCoordinator {
 
         let repairedMapping = await repair.value
         activeRepairs[mapping.id] = nil
+        mappingsByID[repairedMapping.id] = repairedMapping
         return repairedMapping
+    }
+
+    func setMappings(_ mappings: [IconMapping]) {
+        mappingsByID = Dictionary(uniqueKeysWithValues: mappings.map { ($0.id, $0) })
+        mappingOrder = mappings.map(\.id)
+    }
+
+    func repairAll(reason: RepairReason) async -> [IconMapping] {
+        let mappings = mappingOrder.compactMap { mappingsByID[$0] }
+        return await repairAll(mappings, reason: reason)
+    }
+
+    func repairAll(_ mappings: [IconMapping], reason: RepairReason) async -> [IconMapping] {
+        setMappings(mappings)
+        return await withTaskGroup(of: (Int, IconMapping).self, returning: [IconMapping].self) { group in
+            for (index, mapping) in mappings.enumerated() {
+                group.addTask {
+                    (index, await self.repair(mapping, reason: reason))
+                }
+            }
+
+            var repairedMappings = mappings
+            for await (index, repairedMapping) in group {
+                repairedMappings[index] = repairedMapping
+            }
+            setMappings(repairedMappings)
+            return repairedMappings
+        }
     }
 
     private func performRepair(_ mapping: IconMapping, reason _: RepairReason) async -> IconMapping {

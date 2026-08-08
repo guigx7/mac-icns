@@ -42,6 +42,9 @@
 		A60000000000000000000005 /* IconDataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000013 /* IconDataReader.swift */; };
 		A70000000000000000000001 /* IconDataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000013 /* IconDataReader.swift */; };
 		A70000000000000000000002 /* IconDataReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70000000000000000000011 /* IconDataReaderTests.swift */; };
+		A80000000000000000000001 /* RepairSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80000000000000000000011 /* RepairSchedulerTests.swift */; };
+		A80000000000000000000002 /* RepairScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80000000000000000000012 /* RepairScheduler.swift */; };
+		A80000000000000000000003 /* MappingFileMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80000000000000000000013 /* MappingFileMonitor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -119,6 +122,9 @@
 		A60000000000000000000012 /* PrivilegedPathValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedPathValidator.swift; sourceTree = "<group>"; };
 		A60000000000000000000013 /* IconDataReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDataReader.swift; sourceTree = "<group>"; };
 		A70000000000000000000011 /* IconDataReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDataReaderTests.swift; sourceTree = "<group>"; };
+		A80000000000000000000011 /* RepairSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepairSchedulerTests.swift; sourceTree = "<group>"; };
+		A80000000000000000000012 /* RepairScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepairScheduler.swift; sourceTree = "<group>"; };
+		A80000000000000000000013 /* MappingFileMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MappingFileMonitor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -190,6 +196,7 @@
 				A30000000000000000000011 /* RepairCoordinatorTests.swift */,
 				A40000000000000000000011 /* DirectIconApplierTests.swift */,
 				A50000000000000000000011 /* IconApplyRequestTests.swift */,
+				A80000000000000000000011 /* RepairSchedulerTests.swift */,
 			);
 			path = MacICNSTests;
 			sourceTree = "<group>";
@@ -257,6 +264,8 @@
 				A40000000000000000000012 /* DirectIconApplier.swift */,
 				A50000000000000000000014 /* PrivilegedHelperClient.swift */,
 				A50000000000000000000015 /* HelperInstallationService.swift */,
+				A80000000000000000000012 /* RepairScheduler.swift */,
+				A80000000000000000000013 /* MappingFileMonitor.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -401,6 +410,8 @@
 				A60000000000000000000001 /* CodeSigningRequirements.swift in Sources */,
 				A60000000000000000000002 /* PrivilegedPathValidator.swift in Sources */,
 				A70000000000000000000001 /* IconDataReader.swift in Sources */,
+				A80000000000000000000002 /* RepairScheduler.swift in Sources */,
+				A80000000000000000000003 /* MappingFileMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -429,6 +440,7 @@
 				A40000000000000000000001 /* DirectIconApplierTests.swift in Sources */,
 				A50000000000000000000001 /* IconApplyRequestTests.swift in Sources */,
 				A70000000000000000000002 /* IconDataReaderTests.swift in Sources */,
+				A80000000000000000000001 /* RepairSchedulerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

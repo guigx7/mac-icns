@@ -162,6 +162,33 @@ final class RepairCoordinatorTests: XCTestCase {
         XCTAssertEqual(requestCount, 1)
     }
 
+    func testRepairAllContinuesWhenOneMappingFails() async throws {
+        var failingMapping = makeMapping()
+        failingMapping.appFingerprint = "old-app"
+        failingMapping.iconFingerprint = "old-icon"
+        let healthyApplicationURL = temporaryDirectory.appending(path: "Healthy.app", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: healthyApplicationURL, withIntermediateDirectories: true)
+        var healthyMapping = IconMapping(
+            applicationURL: healthyApplicationURL,
+            bundleIdentifier: "com.example.Healthy",
+            iconURL: iconURL
+        )
+        healthyMapping.appFingerprint = "old-app"
+        healthyMapping.iconFingerprint = "old-icon"
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "new"),
+            locator: StubLocator(),
+            applier: SelectiveErrorApplier(failingApplicationURL: applicationURL)
+        )
+
+        await coordinator.setMappings([failingMapping, healthyMapping])
+        let repairedMappings = await coordinator.repairAll(reason: .launch)
+
+        XCTAssertEqual(repairedMappings.count, 2)
+        XCTAssertEqual(repairedMappings.first(where: { $0.id == failingMapping.id })?.status, .failed)
+        XCTAssertEqual(repairedMappings.first(where: { $0.id == healthyMapping.id })?.status, .upToDate)
+    }
+
     private func makeMapping() -> IconMapping {
         IconMapping(
             applicationURL: applicationURL,
@@ -207,6 +234,16 @@ private struct ErrorApplier: IconApplying {
 
     func apply(applicationURL: URL, iconURL: URL) async throws {
         throw error
+    }
+}
+
+private struct SelectiveErrorApplier: IconApplying {
+    let failingApplicationURL: URL
+
+    func apply(applicationURL: URL, iconURL _: URL) async throws {
+        if applicationURL == failingApplicationURL {
+            throw TestError.other
+        }
     }
 }
 
