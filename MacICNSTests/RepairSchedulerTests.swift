@@ -63,8 +63,13 @@ final class RepairSchedulerTests: XCTestCase {
                 Task { await recorder.record(mapping.id) }
             },
             streamFactory: streamFactory.make,
-            schedulerFactory: { repair in
-                RepairScheduler(delay: .seconds(3), clock: clock, repair: repair)
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
             }
         )
 
@@ -168,8 +173,13 @@ final class RepairSchedulerTests: XCTestCase {
         let monitor = MappingFileMonitor(
             repairCoordinator: RepairCoordinator(applier: NoopApplier()),
             streamFactory: streamFactory.make,
-            schedulerFactory: { repair in
-                RepairScheduler(delay: .seconds(3), clock: clock, repair: repair)
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
             }
         )
 
@@ -194,8 +204,13 @@ final class RepairSchedulerTests: XCTestCase {
         let monitor = MappingFileMonitor(
             repairCoordinator: RepairCoordinator(applier: NoopApplier()),
             streamFactory: streamFactory.make,
-            schedulerFactory: { repair in
-                RepairScheduler(delay: .seconds(3), clock: clock, repair: repair)
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
             }
         )
 
@@ -237,8 +252,13 @@ final class RepairSchedulerTests: XCTestCase {
         let monitor = MappingFileMonitor(
             repairCoordinator: RepairCoordinator(applier: NoopApplier()),
             streamFactory: streamFactory.make,
-            schedulerFactory: { repair in
-                RepairScheduler(delay: .seconds(3), clock: clock, repair: repair)
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
             }
         )
 
@@ -252,6 +272,103 @@ final class RepairSchedulerTests: XCTestCase {
         stream.emit(paths: ["/Applications"])
         let parentSleepStarted = await clock.waitUntilSleeping(count: 1)
         XCTAssertTrue(parentSleepStarted)
+    }
+
+    @MainActor
+    func testMovedApplicationReconfiguresAfterScheduledRepairCompletes() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let oldApplicationURL = temporaryDirectory
+            .appending(path: "Old/Example.app", directoryHint: .isDirectory)
+        let movedApplicationURL = temporaryDirectory
+            .appending(path: "New/Example.app", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: movedApplicationURL, withIntermediateDirectories: true)
+
+        let mapping = IconMapping(
+            applicationURL: oldApplicationURL,
+            bundleIdentifier: "com.example.Example",
+            iconURL: temporaryDirectory.appending(path: "Example.icns")
+        )
+        let clock = TestClock()
+        let streamFactory = RecordingStreamFactory()
+        let coordinator = RepairCoordinator(
+            fingerprinting: FixedFingerprint(),
+            locator: FixedLocator(result: movedApplicationURL),
+            applier: NoopApplier()
+        )
+        let monitor = MappingFileMonitor(
+            repairCoordinator: coordinator,
+            streamFactory: streamFactory.make,
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
+            }
+        )
+
+        await monitor.start(mappings: [mapping])
+        let firstStream = try XCTUnwrap(streamFactory.latestStream)
+        firstStream.emit(paths: [oldApplicationURL.path])
+        let sleepStarted = await clock.waitUntilSleeping(count: 1)
+        XCTAssertTrue(sleepStarted)
+        await clock.advance(by: .seconds(3))
+
+        let newParent = movedApplicationURL.deletingLastPathComponent().standardizedFileURL.path
+        let reconfigured = await streamFactory.waitUntilDirectorySet(newParent)
+        XCTAssertTrue(reconfigured)
+        XCTAssertEqual(firstStream.stopCount, 1)
+    }
+
+    @MainActor
+    func testOverlappingStartsLeaveOnlyTheNewestMappingStreamActive() async {
+        let clock = BlockingClock()
+        let streamFactory = RecordingStreamFactory()
+        let initialMapping = makeMapping(applicationPath: "/Applications/Initial.app")
+        let intermediateMapping = makeMapping(applicationPath: "/Applications/Intermediate.app")
+        let newestMapping = makeMapping(applicationPath: "/Applications/Newest.app")
+        let monitor = MappingFileMonitor(
+            repairCoordinator: RepairCoordinator(applier: NoopApplier()),
+            streamFactory: streamFactory.make,
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
+            }
+        )
+
+        await monitor.start(mappings: [initialMapping])
+        let initialStream = try! XCTUnwrap(streamFactory.latestStream)
+        initialStream.emit(paths: [initialMapping.applicationURL.path])
+        let sleepStarted = await clock.waitUntilSleepRequested(count: 1)
+        XCTAssertTrue(sleepStarted)
+
+        let intermediateStart = Task { @MainActor in
+            await monitor.start(mappings: [intermediateMapping])
+        }
+        let cancellationRequested = await clock.waitUntilCancellationRequested(count: 1)
+        XCTAssertTrue(cancellationRequested)
+
+        let newestStart = Task { @MainActor in
+            await monitor.start(mappings: [newestMapping])
+        }
+        await clock.releaseAllSleepers()
+        await intermediateStart.value
+        await newestStart.value
+
+        XCTAssertEqual(
+            streamFactory.directorySets,
+            [["/Applications"], ["/Applications"]]
+        )
+        XCTAssertEqual(initialStream.stopCount, 1)
+        XCTAssertEqual(streamFactory.latestStream?.startCount, 1)
     }
 
     private func makeMapping(applicationPath: String) -> IconMapping {
@@ -309,6 +426,20 @@ private actor RepairGate {
     func releaseRepair() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+private struct FixedFingerprint: Fingerprinting {
+    func fingerprint(of _: URL) throws -> String {
+        "fingerprint"
+    }
+}
+
+private struct FixedLocator: ApplicationLocating {
+    let result: URL?
+
+    func resolve(_: String) -> URL? {
+        result
     }
 }
 
@@ -453,6 +584,16 @@ private final class RecordingStreamFactory {
         let stream = FakeMappingEventStream(handler: handler)
         streams.append(stream)
         return stream
+    }
+
+    func waitUntilDirectorySet(_ directory: String) async -> Bool {
+        for _ in 0 ..< 100 {
+            if directorySets.contains([directory]) {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return directorySets.contains([directory])
     }
 }
 

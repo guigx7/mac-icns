@@ -12,7 +12,10 @@ typealias MappingEventStreamFactory = @MainActor (
     @escaping @Sendable ([String]) -> Void
 ) -> any MappingEventStream
 
-typealias RepairSchedulerFactory = (@escaping RepairScheduler.Repair) -> RepairScheduler
+typealias RepairSchedulerFactory = (
+    @escaping RepairScheduler.Repair,
+    @escaping RepairScheduler.RepairCompletion
+) -> RepairScheduler
 
 @MainActor
 final class MappingFileMonitor {
@@ -22,18 +25,26 @@ final class MappingFileMonitor {
     private let onRepair: RepairHandler
     private let streamFactory: MappingEventStreamFactory
     private let schedulerFactory: RepairSchedulerFactory
-    private lazy var scheduler: RepairScheduler = schedulerFactory { [weak self] mappingID, reason in
-        await self?.repair(mappingID: mappingID, reason: reason)
-    }
+    private lazy var scheduler: RepairScheduler = schedulerFactory(
+        { [weak self] mappingID, reason in
+            await self?.repair(mappingID: mappingID, reason: reason)
+        },
+        { [weak self] mappingID in
+            await self?.repairDidFinish(mappingID: mappingID)
+        }
+    )
     private var mappingsByID: [UUID: IconMapping] = [:]
     private var stream: (any MappingEventStream)?
     private var streamGeneration = 0
+    private var mappingsAwaitingReconfiguration: Set<UUID> = []
 
     init(
         repairCoordinator: RepairCoordinator,
         onRepair: @escaping RepairHandler = { _ in },
         streamFactory: @escaping MappingEventStreamFactory = MappingFileMonitor.makeFSEventStream,
-        schedulerFactory: @escaping RepairSchedulerFactory = { repair in RepairScheduler(repair: repair) }
+        schedulerFactory: @escaping RepairSchedulerFactory = { repair, completion in
+            RepairScheduler(repair: repair, repairCompletion: completion)
+        }
     ) {
         self.repairCoordinator = repairCoordinator
         self.onRepair = onRepair
@@ -43,11 +54,20 @@ final class MappingFileMonitor {
 
     func start(mappings: [IconMapping]) async {
         streamGeneration += 1
+        let generation = streamGeneration
         stopStream()
-        await scheduler.beginGeneration(streamGeneration)
+        await scheduler.beginGeneration(generation)
+
+        guard streamGeneration == generation else {
+            return
+        }
 
         mappingsByID = Dictionary(uniqueKeysWithValues: mappings.map { ($0.id, $0) })
         await repairCoordinator.setMappings(mappings)
+
+        guard streamGeneration == generation else {
+            return
+        }
 
         let directories = Set(mappings.map {
             $0.applicationURL.deletingLastPathComponent().standardizedFileURL.path
@@ -56,7 +76,6 @@ final class MappingFileMonitor {
             return
         }
 
-        let generation = streamGeneration
         let stream = streamFactory(directories) { [weak self] paths in
             Task { @MainActor in
                 guard let self, self.streamGeneration == generation else {
@@ -124,9 +143,16 @@ final class MappingFileMonitor {
         mappingsByID[repairedMapping.id] = repairedMapping
         if repairedMapping.applicationURL.deletingLastPathComponent().standardizedFileURL
             != mapping.applicationURL.deletingLastPathComponent().standardizedFileURL {
-            await start(mappings: Array(mappingsByID.values))
+            mappingsAwaitingReconfiguration.insert(repairedMapping.id)
         }
         onRepair(repairedMapping)
+    }
+
+    private func repairDidFinish(mappingID: UUID) async {
+        guard mappingsAwaitingReconfiguration.remove(mappingID) != nil else {
+            return
+        }
+        await start(mappings: Array(mappingsByID.values))
     }
 
     private static func makeFSEventStream(

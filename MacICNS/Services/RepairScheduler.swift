@@ -12,6 +12,7 @@ struct ContinuousRepairSchedulingClock: RepairSchedulingClock {
 
 actor RepairScheduler {
     typealias Repair = @Sendable (UUID, RepairReason) async -> Void
+    typealias RepairCompletion = @Sendable (UUID) async -> Void
 
     private struct PendingRepair {
         let token: UUID
@@ -21,17 +22,20 @@ actor RepairScheduler {
     private let delay: Duration
     private let clock: any RepairSchedulingClock
     private let repair: Repair
+    private let repairCompletion: RepairCompletion
     private var pendingRepairs: [UUID: PendingRepair] = [:]
     private var activeGeneration = 0
 
     init(
         delay: Duration = .seconds(3),
         clock: any RepairSchedulingClock = ContinuousRepairSchedulingClock(),
-        repair: @escaping Repair
+        repair: @escaping Repair,
+        repairCompletion: @escaping RepairCompletion = { _ in }
     ) {
         self.delay = delay
         self.clock = clock
         self.repair = repair
+        self.repairCompletion = repairCompletion
     }
 
     func enqueue(mappingID: UUID, reason: RepairReason) async {
@@ -50,25 +54,23 @@ actor RepairScheduler {
         }
 
         let token = UUID()
-        let task = Task { [clock, delay, repair] in
+        let task = Task { [weak self, clock, delay, repair] in
             do {
                 try await clock.sleep(for: delay)
             } catch {
+                await self?.finish(mappingID: mappingID, token: token)
                 return
             }
 
             guard !Task.isCancelled else {
+                await self?.finish(mappingID: mappingID, token: token)
                 return
             }
 
             await repair(mappingID, reason)
-        }
-        pendingRepairs[mappingID] = PendingRepair(token: token, task: task)
-
-        Task { [weak self] in
-            await task.value
             await self?.finish(mappingID: mappingID, token: token)
         }
+        pendingRepairs[mappingID] = PendingRepair(token: token, task: task)
     }
 
     func beginGeneration(_ generation: Int) async {
@@ -105,10 +107,11 @@ actor RepairScheduler {
         }
     }
 
-    private func finish(mappingID: UUID, token: UUID) {
+    private func finish(mappingID: UUID, token: UUID) async {
         guard pendingRepairs[mappingID]?.token == token else {
             return
         }
         pendingRepairs[mappingID] = nil
+        await repairCompletion(mappingID)
     }
 }
