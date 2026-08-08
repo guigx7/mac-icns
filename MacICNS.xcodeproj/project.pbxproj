@@ -40,6 +40,8 @@
 		A60000000000000000000003 /* CodeSigningRequirements.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000011 /* CodeSigningRequirements.swift */; };
 		A60000000000000000000004 /* PrivilegedPathValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000012 /* PrivilegedPathValidator.swift */; };
 		A60000000000000000000005 /* IconDataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000013 /* IconDataReader.swift */; };
+		A70000000000000000000001 /* IconDataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000013 /* IconDataReader.swift */; };
+		A70000000000000000000002 /* IconDataReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70000000000000000000011 /* IconDataReaderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -116,6 +118,7 @@
 		A60000000000000000000011 /* CodeSigningRequirements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSigningRequirements.swift; sourceTree = "<group>"; };
 		A60000000000000000000012 /* PrivilegedPathValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedPathValidator.swift; sourceTree = "<group>"; };
 		A60000000000000000000013 /* IconDataReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDataReader.swift; sourceTree = "<group>"; };
+		A70000000000000000000011 /* IconDataReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconDataReaderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -182,6 +185,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000013 /* MacICNSTests.swift */,
+				A70000000000000000000011 /* IconDataReaderTests.swift */,
 				A20000000000000000000015 /* JSONMappingRepositoryTests.swift */,
 				A30000000000000000000011 /* RepairCoordinatorTests.swift */,
 				A40000000000000000000011 /* DirectIconApplierTests.swift */,
@@ -396,6 +400,7 @@
 				A50000000000000000000009 /* HelperInstallationService.swift in Sources */,
 				A60000000000000000000001 /* CodeSigningRequirements.swift in Sources */,
 				A60000000000000000000002 /* PrivilegedPathValidator.swift in Sources */,
+				A70000000000000000000001 /* IconDataReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -423,6 +428,7 @@
 				A30000000000000000000001 /* RepairCoordinatorTests.swift in Sources */,
 				A40000000000000000000001 /* DirectIconApplierTests.swift in Sources */,
 				A50000000000000000000001 /* IconApplyRequestTests.swift in Sources */,
+				A70000000000000000000002 /* IconDataReaderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
