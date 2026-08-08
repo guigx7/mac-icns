@@ -26,6 +26,15 @@
 		A40000000000000000000002 /* DirectIconApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000012 /* DirectIconApplier.swift */; };
 		A40000000000000000000003 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000013 /* AppState.swift */; };
 		A40000000000000000000004 /* MappingListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000014 /* MappingListView.swift */; };
+		A50000000000000000000001 /* IconApplyRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000011 /* IconApplyRequestTests.swift */; };
+		A50000000000000000000002 /* IconHelperXPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000012 /* IconHelperXPCProtocol.swift */; };
+		A50000000000000000000003 /* IconApplyRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000013 /* IconApplyRequest.swift */; };
+		A50000000000000000000004 /* IconHelperXPCProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000012 /* IconHelperXPCProtocol.swift */; };
+		A50000000000000000000005 /* IconApplyRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000013 /* IconApplyRequest.swift */; };
+		A50000000000000000000008 /* PrivilegedHelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000014 /* PrivilegedHelperClient.swift */; };
+		A50000000000000000000009 /* HelperInstallationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000015 /* HelperInstallationService.swift */; };
+		A5000000000000000000000A /* IconHelperService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000016 /* IconHelperService.swift */; };
+		A5000000000000000000000B /* ClientValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50000000000000000000017 /* ClientValidator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,6 +101,13 @@
 		A40000000000000000000012 /* DirectIconApplier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectIconApplier.swift; sourceTree = "<group>"; };
 		A40000000000000000000013 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		A40000000000000000000014 /* MappingListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MappingListView.swift; sourceTree = "<group>"; };
+		A50000000000000000000011 /* IconApplyRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconApplyRequestTests.swift; sourceTree = "<group>"; };
+		A50000000000000000000012 /* IconHelperXPCProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconHelperXPCProtocol.swift; sourceTree = "<group>"; };
+		A50000000000000000000013 /* IconApplyRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconApplyRequest.swift; sourceTree = "<group>"; };
+		A50000000000000000000014 /* PrivilegedHelperClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedHelperClient.swift; sourceTree = "<group>"; };
+		A50000000000000000000015 /* HelperInstallationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperInstallationService.swift; sourceTree = "<group>"; };
+		A50000000000000000000016 /* IconHelperService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconHelperService.swift; sourceTree = "<group>"; };
+		A50000000000000000000017 /* ClientValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientValidator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -126,6 +142,7 @@
 				A10000000000000000000043 /* MacICNSHelper */,
 				A10000000000000000000044 /* MacICNSTests */,
 				A10000000000000000000045 /* Resources */,
+				A50000000000000000000021 /* Shared */,
 				A10000000000000000000046 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -146,6 +163,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000012 /* main.swift */,
+				A50000000000000000000016 /* IconHelperService.swift */,
+				A50000000000000000000017 /* ClientValidator.swift */,
 			);
 			path = MacICNSHelper;
 			sourceTree = "<group>";
@@ -157,6 +176,7 @@
 				A20000000000000000000015 /* JSONMappingRepositoryTests.swift */,
 				A30000000000000000000011 /* RepairCoordinatorTests.swift */,
 				A40000000000000000000011 /* DirectIconApplierTests.swift */,
+				A50000000000000000000011 /* IconApplyRequestTests.swift */,
 			);
 			path = MacICNSTests;
 			sourceTree = "<group>";
@@ -222,6 +242,8 @@
 				A30000000000000000000014 /* ApplicationLocator.swift */,
 				A30000000000000000000015 /* RepairCoordinator.swift */,
 				A40000000000000000000012 /* DirectIconApplier.swift */,
+				A50000000000000000000014 /* PrivilegedHelperClient.swift */,
+				A50000000000000000000015 /* HelperInstallationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -232,6 +254,15 @@
 				A40000000000000000000014 /* MappingListView.swift */,
 			);
 			path = UI;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000021 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				A50000000000000000000012 /* IconHelperXPCProtocol.swift */,
+				A50000000000000000000013 /* IconApplyRequest.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -348,6 +379,10 @@
 				A30000000000000000000005 /* RepairCoordinator.swift in Sources */,
 				A40000000000000000000002 /* DirectIconApplier.swift in Sources */,
 				A40000000000000000000004 /* MappingListView.swift in Sources */,
+				A50000000000000000000002 /* IconHelperXPCProtocol.swift in Sources */,
+				A50000000000000000000003 /* IconApplyRequest.swift in Sources */,
+				A50000000000000000000008 /* PrivilegedHelperClient.swift in Sources */,
+				A50000000000000000000009 /* HelperInstallationService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,6 +391,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000002 /* main.swift in Sources */,
+				A50000000000000000000004 /* IconHelperXPCProtocol.swift in Sources */,
+				A50000000000000000000005 /* IconApplyRequest.swift in Sources */,
+				A5000000000000000000000A /* IconHelperService.swift in Sources */,
+				A5000000000000000000000B /* ClientValidator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -367,6 +406,7 @@
 				A20000000000000000000005 /* JSONMappingRepositoryTests.swift in Sources */,
 				A30000000000000000000001 /* RepairCoordinatorTests.swift in Sources */,
 				A40000000000000000000001 /* DirectIconApplierTests.swift in Sources */,
+				A50000000000000000000001 /* IconApplyRequestTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
