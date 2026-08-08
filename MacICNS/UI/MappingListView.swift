@@ -85,14 +85,8 @@ private struct MappingEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var applicationURL: URL?
     @State private var iconURL: URL?
-    @State private var isChoosingApplication = false
-    @State private var isChoosingIcon = false
 
     let save: (URL, URL) -> Void
-
-    private var iconType: UTType {
-        UTType(filenameExtension: "icns") ?? .data
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -104,7 +98,7 @@ private struct MappingEditorView: View {
                 selection: applicationURL?.lastPathComponent,
                 actionTitle: "Choose Application"
             ) {
-                isChoosingApplication = true
+                chooseApplication()
             }
 
             selectionRow(
@@ -112,7 +106,7 @@ private struct MappingEditorView: View {
                 selection: iconURL?.lastPathComponent,
                 actionTitle: "Choose ICNS File"
             ) {
-                isChoosingIcon = true
+                chooseIcon()
             }
 
             Text("Mappings are saved locally. Protected applications report “Needs permission”; this version does not request elevation.")
@@ -133,21 +127,39 @@ private struct MappingEditorView: View {
         }
         .padding(24)
         .frame(width: 460)
-        .fileImporter(
-            isPresented: $isChoosingApplication,
-            allowedContentTypes: [.applicationBundle]
-        ) { result in
-            if case let .success(url) = result {
-                applicationURL = url
-            }
+    }
+
+    private func chooseApplication() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Application"
+        panel.prompt = "Choose"
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+
+        panel.begin { response in
+            guard response == .OK,
+                  let url = panel.url,
+                  FileSelectionValidator.isApplication(url) else { return }
+            applicationURL = url
         }
-        .fileImporter(
-            isPresented: $isChoosingIcon,
-            allowedContentTypes: [iconType]
-        ) { result in
-            if case let .success(url) = result {
-                iconURL = url
-            }
+    }
+
+    private func chooseIcon() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose ICNS File"
+        panel.prompt = "Choose"
+        panel.allowedContentTypes = [FileSelectionValidator.icnsType]
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+
+        panel.begin { response in
+            guard response == .OK,
+                  let url = panel.url,
+                  FileSelectionValidator.isIcon(url) else { return }
+            iconURL = url
         }
     }
 
@@ -168,6 +180,18 @@ private struct MappingEditorView: View {
             Spacer()
             Button(actionTitle, action: action)
         }
+    }
+}
+
+enum FileSelectionValidator {
+    static let icnsType = UTType(filenameExtension: "icns") ?? .data
+
+    static func isApplication(_ url: URL) -> Bool {
+        url.pathExtension.caseInsensitiveCompare("app") == .orderedSame
+    }
+
+    static func isIcon(_ url: URL) -> Bool {
+        url.pathExtension.caseInsensitiveCompare("icns") == .orderedSame
     }
 }
 
