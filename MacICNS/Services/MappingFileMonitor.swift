@@ -44,7 +44,7 @@ final class MappingFileMonitor {
     func start(mappings: [IconMapping]) async {
         streamGeneration += 1
         stopStream()
-        await scheduler.cancelAll()
+        await scheduler.beginGeneration(streamGeneration)
 
         mappingsByID = Dictionary(uniqueKeysWithValues: mappings.map { ($0.id, $0) })
         await repairCoordinator.setMappings(mappings)
@@ -62,7 +62,7 @@ final class MappingFileMonitor {
                 guard let self, self.streamGeneration == generation else {
                     return
                 }
-                await self.process(eventsAtPaths: paths)
+                await self.process(eventsAtPaths: paths, generation: generation)
             }
         }
         self.stream = stream
@@ -72,7 +72,7 @@ final class MappingFileMonitor {
     func stop() async {
         streamGeneration += 1
         stopStream()
-        await scheduler.cancelAll()
+        await scheduler.beginGeneration(streamGeneration)
     }
 
     private func stopStream() {
@@ -80,21 +80,34 @@ final class MappingFileMonitor {
         stream = nil
     }
 
-    private func process(eventsAtPaths paths: [String]) async {
+    func process(eventsAtPaths paths: [String], generation: Int) async {
         let affectedIDs = Set(paths.flatMap(affectedMappingIDs(forEventAtPath:)))
         for mappingID in affectedIDs {
-            await scheduler.enqueue(mappingID: mappingID, reason: .fileSystemChange)
+            guard streamGeneration == generation else {
+                return
+            }
+            await scheduler.enqueue(
+                mappingID: mappingID,
+                reason: .fileSystemChange,
+                generation: generation
+            )
+            guard streamGeneration == generation else {
+                return
+            }
         }
     }
 
     private func affectedMappingIDs(forEventAtPath path: String) -> [UUID] {
-        let eventURL = URL(filePath: path).standardizedFileURL
+        let eventPath = URL(filePath: path).standardizedFileURL.path
         return mappingsByID.values.compactMap { mapping in
-            let applicationURL = mapping.applicationURL.standardizedFileURL
-            let parentURL = applicationURL.deletingLastPathComponent().standardizedFileURL
-            guard eventURL == applicationURL
-                || eventURL.path.hasPrefix(applicationURL.path + "/")
-                || eventURL == parentURL
+            let applicationPath = mapping.applicationURL.standardizedFileURL.path
+            let parentPath = mapping.applicationURL
+                .deletingLastPathComponent()
+                .standardizedFileURL
+                .path
+            guard eventPath == applicationPath
+                || eventPath.hasPrefix(applicationPath + "/")
+                || eventPath == parentPath
             else {
                 return nil
             }

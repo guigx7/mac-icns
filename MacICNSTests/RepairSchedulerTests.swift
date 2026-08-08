@@ -127,6 +127,38 @@ final class RepairSchedulerTests: XCTestCase {
         XCTAssertTrue(recordedIDs.isEmpty)
     }
 
+    func testCancelAllWaitsForAnAwakenedRepairToFinish() async {
+        let clock = TestClock()
+        let repairGate = RepairGate()
+        let completion = CompletionRecorder()
+        let mappingID = UUID()
+        let scheduler = RepairScheduler(delay: .seconds(3), clock: clock) { id, _ in
+            await repairGate.repair(id)
+        }
+
+        await scheduler.enqueue(mappingID: mappingID, reason: .fileSystemChange)
+        let sleepStarted = await clock.waitUntilSleeping(count: 1)
+        XCTAssertTrue(sleepStarted)
+        await clock.advance(by: .seconds(3))
+        let repairStarted = await repairGate.waitUntilRepairStarts()
+        XCTAssertTrue(repairStarted)
+
+        let cancellation = Task {
+            await scheduler.cancelAll()
+            await completion.recordCompletion()
+        }
+        for _ in 0 ..< 10 {
+            await Task.yield()
+        }
+        let completedBeforeRepair = await completion.hasCompleted
+        XCTAssertFalse(completedBeforeRepair)
+
+        await repairGate.releaseRepair()
+        await cancellation.value
+        let completedAfterRepair = await completion.hasCompleted
+        XCTAssertTrue(completedAfterRepair)
+    }
+
     @MainActor
     func testMonitorIgnoresEventsFromTheReplacedStream() async {
         let clock = TestClock()
@@ -153,6 +185,75 @@ final class RepairSchedulerTests: XCTestCase {
         XCTAssertEqual(sleeperCount, 0)
     }
 
+    @MainActor
+    func testMonitorDoesNotEnqueueAnOldGenerationAfterSchedulerSuspension() async {
+        let clock = BlockingClock()
+        let streamFactory = RecordingStreamFactory()
+        let oldMapping = makeMapping(applicationPath: "/Applications/Old.app")
+        let newMapping = makeMapping(applicationPath: "/Applications/New.app")
+        let monitor = MappingFileMonitor(
+            repairCoordinator: RepairCoordinator(applier: NoopApplier()),
+            streamFactory: streamFactory.make,
+            schedulerFactory: { repair in
+                RepairScheduler(delay: .seconds(3), clock: clock, repair: repair)
+            }
+        )
+
+        await monitor.start(mappings: [oldMapping])
+        let oldStream = try! XCTUnwrap(streamFactory.latestStream)
+        oldStream.emit(paths: ["/Applications/Old.app"])
+        let firstSleepStarted = await clock.waitUntilSleepRequested(count: 1)
+        XCTAssertTrue(firstSleepStarted)
+
+        oldStream.emit(paths: ["/Applications/Old.app"])
+        let cancellationWasRequested = await clock.waitUntilCancellationRequested(count: 1)
+        XCTAssertTrue(cancellationWasRequested)
+
+        let restart = Task { @MainActor in
+            await monitor.start(mappings: [newMapping])
+        }
+        for _ in 0 ..< 10 {
+            await Task.yield()
+        }
+        await clock.releaseAllSleepers()
+        await restart.value
+        for _ in 0 ..< 10 {
+            await Task.yield()
+        }
+
+        let requestedDurations = await clock.requestedDurations
+        await clock.releaseAllSleepers()
+        for _ in 0 ..< 10 {
+            await Task.yield()
+        }
+        XCTAssertEqual(requestedDurations, [.seconds(3)])
+    }
+
+    @MainActor
+    func testMonitorMatchesOnlyTheExactParentOrApplicationPathBoundary() async {
+        let clock = TestClock()
+        let streamFactory = RecordingStreamFactory()
+        let mapping = makeMapping(applicationPath: "/Applications/Foo.app")
+        let monitor = MappingFileMonitor(
+            repairCoordinator: RepairCoordinator(applier: NoopApplier()),
+            streamFactory: streamFactory.make,
+            schedulerFactory: { repair in
+                RepairScheduler(delay: .seconds(3), clock: clock, repair: repair)
+            }
+        )
+
+        await monitor.start(mappings: [mapping])
+        let stream = try! XCTUnwrap(streamFactory.latestStream)
+        stream.emit(paths: ["/Applications/Foo.app-copy/Contents/Info.plist"])
+        try? await Task.sleep(for: .milliseconds(10))
+        let prefixSleeperCount = await clock.sleeperCount
+        XCTAssertEqual(prefixSleeperCount, 0)
+
+        stream.emit(paths: ["/Applications"])
+        let parentSleepStarted = await clock.waitUntilSleeping(count: 1)
+        XCTAssertTrue(parentSleepStarted)
+    }
+
     private func makeMapping(applicationPath: String) -> IconMapping {
         IconMapping(
             applicationURL: URL(filePath: applicationPath, directoryHint: .isDirectory),
@@ -173,6 +274,41 @@ private actor RepairRecorder {
         while ids.count < count {
             await Task.yield()
         }
+    }
+}
+
+private actor CompletionRecorder {
+    private(set) var hasCompleted = false
+
+    func recordCompletion() {
+        hasCompleted = true
+    }
+}
+
+private actor RepairGate {
+    private var repairStarted = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func repair(_: UUID) async {
+        repairStarted = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilRepairStarts() async -> Bool {
+        for _ in 0 ..< 100 {
+            if repairStarted {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return repairStarted
+    }
+
+    func releaseRepair() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 
@@ -209,7 +345,7 @@ private actor TestClock: RepairSchedulingClock {
             if sleepers.count >= count {
                 return true
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
         }
         return sleepers.count >= count
     }
@@ -219,7 +355,7 @@ private actor TestClock: RepairSchedulingClock {
             if requestedDurations.count >= count {
                 return true
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1))
         }
         return requestedDurations.count >= count
     }
@@ -245,6 +381,58 @@ private actor TestClock: RepairSchedulingClock {
             }
             sleeper.continuation.resume()
         }
+    }
+}
+
+private actor BlockingClock: RepairSchedulingClock {
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private(set) var requestedDurations: [Duration] = []
+    private var cancellationRequests = 0
+
+    func sleep(for duration: Duration) async throws {
+        try await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                requestedDurations.append(duration)
+                continuations.append(continuation)
+            }
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+        } onCancel: {
+            Task { await self.recordCancellationRequest() }
+        }
+    }
+
+    func waitUntilSleepRequested(count: Int) async -> Bool {
+        for _ in 0 ..< 100 {
+            if requestedDurations.count >= count {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return requestedDurations.count >= count
+    }
+
+    func waitUntilCancellationRequested(count: Int) async -> Bool {
+        for _ in 0 ..< 100 {
+            if cancellationRequests >= count {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return cancellationRequests >= count
+    }
+
+    func releaseAllSleepers() {
+        let sleepers = continuations
+        continuations.removeAll()
+        for continuation in sleepers {
+            continuation.resume()
+        }
+    }
+
+    private func recordCancellationRequest() {
+        cancellationRequests += 1
     }
 }
 

@@ -22,6 +22,7 @@ actor RepairScheduler {
     private let clock: any RepairSchedulingClock
     private let repair: Repair
     private var pendingRepairs: [UUID: PendingRepair] = [:]
+    private var activeGeneration = 0
 
     init(
         delay: Duration = .seconds(3),
@@ -33,8 +34,20 @@ actor RepairScheduler {
         self.repair = repair
     }
 
-    func enqueue(mappingID: UUID, reason: RepairReason) {
-        pendingRepairs[mappingID]?.task.cancel()
+    func enqueue(mappingID: UUID, reason: RepairReason) async {
+        await enqueue(mappingID: mappingID, reason: reason, generation: activeGeneration)
+    }
+
+    func enqueue(mappingID: UUID, reason: RepairReason, generation: Int) async {
+        guard generation == activeGeneration else {
+            return
+        }
+
+        await cancelAndWaitForPendingRepair(mappingID: mappingID)
+
+        guard generation == activeGeneration else {
+            return
+        }
 
         let token = UUID()
         let task = Task { [clock, delay, repair] in
@@ -58,11 +71,38 @@ actor RepairScheduler {
         }
     }
 
-    func cancelAll() {
-        for pendingRepair in pendingRepairs.values {
+    func beginGeneration(_ generation: Int) async {
+        activeGeneration = generation
+        await cancelAllPendingRepairs()
+    }
+
+    func cancelAll() async {
+        activeGeneration += 1
+        await cancelAllPendingRepairs()
+    }
+
+    private func cancelAndWaitForPendingRepair(mappingID: UUID) async {
+        while let pendingRepair = pendingRepairs[mappingID] {
+            pendingRepair.task.cancel()
+            await pendingRepair.task.value
+
+            guard pendingRepairs[mappingID]?.token == pendingRepair.token else {
+                continue
+            }
+            pendingRepairs[mappingID] = nil
+        }
+    }
+
+    private func cancelAllPendingRepairs() async {
+        let repairs = Array(pendingRepairs.values)
+        pendingRepairs.removeAll()
+
+        for pendingRepair in repairs {
             pendingRepair.task.cancel()
         }
-        pendingRepairs.removeAll()
+        for pendingRepair in repairs {
+            await pendingRepair.task.value
+        }
     }
 
     private func finish(mappingID: UUID, token: UUID) {
