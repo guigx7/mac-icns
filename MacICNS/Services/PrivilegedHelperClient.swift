@@ -20,9 +20,7 @@ struct PrivilegedHelperClient: IconApplying, Sendable {
         try await withCheckedThrowingContinuation { continuation in
             completion.continuation = continuation
             connection.remoteObjectInterface = NSXPCInterface(with: IconHelperXPCProtocol.self)
-            connection.setCodeSigningRequirement(
-                "identifier \"com.guigx.macicns.helper\" and anchor apple generic"
-            )
+            connection.setCodeSigningRequirement(CodeSigningRequirements.helper)
             connection.interruptionHandler = {
                 completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
             }

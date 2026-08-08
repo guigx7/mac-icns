@@ -7,7 +7,6 @@ final class IconApplyRequest: NSObject, NSSecureCoding, @unchecked Sendable {
         case applicationMustBeAnExistingBundle
         case iconMustBeAnExistingICNSFile
         case symbolicLinksAreNotAllowed
-        case iconCouldNotBeLoaded
     }
 
     static var supportsSecureCoding: Bool { true }

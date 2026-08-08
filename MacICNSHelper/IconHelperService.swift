@@ -33,10 +33,14 @@ final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCPro
                 applicationURL: request.applicationURL,
                 iconURL: request.iconURL
             )
-            guard let image = NSImage(contentsOf: validatedRequest.iconURL) else {
-                reply(helperError(code: 2, description: "The icon could not be loaded."))
+            guard NSXPCConnection.current() != nil else {
+                reply(helperError(code: 1, description: "The caller could not be identified."))
                 return
             }
+            try PrivilegedPathValidator.validate(
+                applicationURL: validatedRequest.applicationURL
+            )
+            let image = try IconDataReader.image(at: validatedRequest.iconURL)
 
             let succeeded = NSWorkspace.shared.setIcon(
                 image,

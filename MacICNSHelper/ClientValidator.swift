@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 struct ClientValidator {
-    static let requiredClientRequirement = "identifier \"com.guigx.macicns\" and anchor apple generic"
+    static let requiredClientRequirement = CodeSigningRequirements.client
 
     func isValid(connection: NSXPCConnection) -> Bool {
         // NSXPCConnection exposes the kernel-provided peer PID publicly; unlike raw XPC,
