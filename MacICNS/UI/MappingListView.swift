@@ -134,6 +134,7 @@ private struct MappingEditorView: View {
         panel.title = "Choose Application"
         panel.prompt = "Choose"
         panel.allowedContentTypes = [.applicationBundle]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
@@ -151,6 +152,7 @@ private struct MappingEditorView: View {
         panel.title = "Choose ICNS File"
         panel.prompt = "Choose"
         panel.allowedContentTypes = [FileSelectionValidator.icnsType]
+        panel.directoryURL = FileSelectionValidator.lastIconDirectory
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
@@ -159,6 +161,7 @@ private struct MappingEditorView: View {
             guard response == .OK,
                   let url = panel.url,
                   FileSelectionValidator.isIcon(url) else { return }
+            FileSelectionValidator.lastIconDirectory = url.deletingLastPathComponent()
             iconURL = url
         }
     }
@@ -184,7 +187,13 @@ private struct MappingEditorView: View {
 }
 
 enum FileSelectionValidator {
+    private static let lastIconDirectoryKey = "lastIconDirectory"
     static let icnsType = UTType(filenameExtension: "icns") ?? .data
+
+    static var lastIconDirectory: URL? {
+        get { UserDefaults.standard.url(forKey: lastIconDirectoryKey) }
+        set { UserDefaults.standard.set(newValue, forKey: lastIconDirectoryKey) }
+    }
 
     static func isApplication(_ url: URL) -> Bool {
         url.pathExtension.caseInsensitiveCompare("app") == .orderedSame
