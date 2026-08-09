@@ -493,8 +493,7 @@
 		A100000000000000000000C0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGNING_ALLOWED = NO;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = DHAFYHA4FG;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -502,7 +501,6 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.guigx.macicns;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
 			};
@@ -511,14 +509,13 @@
 		A100000000000000000000C1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = DHAFYHA4FG;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MacICNS/App/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.guigx.macicns;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
 			};
@@ -527,7 +524,9 @@
 		A100000000000000000000D0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = DHAFYHA4FG;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MacICNSHelper/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -541,6 +540,9 @@
 		A100000000000000000000D1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = DHAFYHA4FG;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MacICNSHelper/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;

@@ -69,10 +69,18 @@ private struct SettingsView: View {
 
             Section("Privileged Helper") {
                 Text(helperStatusMessage)
-                if appState.helperStatus == .requiresApproval {
+                if appState.helperStatus == .notInstalled {
+                    Button("Install Helper") {
+                        appState.installHelper()
+                    }
+                } else if appState.helperStatus == .requiresApproval {
                     Button("Open Login Items Settings") {
                         appState.openHelperApprovalSettings()
                     }
+                }
+                if let helperError = appState.helperError {
+                    Text(helperError)
+                        .foregroundStyle(.red)
                 }
                 Button("Refresh Helper Status") {
                     appState.refreshHelperStatus()
@@ -81,6 +89,9 @@ private struct SettingsView: View {
         }
         .padding()
         .frame(width: 380)
+        .onAppear {
+            appState.refreshHelperStatus()
+        }
     }
 
     private var helperStatusMessage: String {

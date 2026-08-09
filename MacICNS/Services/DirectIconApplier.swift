@@ -1,6 +1,29 @@
 import AppKit
 import Foundation
 
+struct IconApplierRouter: IconApplying, Sendable {
+    private let isApplicationWritable: @Sendable (URL) -> Bool
+    private let direct: any IconApplying
+    private let privileged: any IconApplying
+
+    init(
+        isApplicationWritable: @escaping @Sendable (URL) -> Bool = {
+            FileManager.default.isWritableFile(atPath: $0.path)
+        },
+        direct: any IconApplying = DirectIconApplier(),
+        privileged: any IconApplying = PrivilegedHelperClient()
+    ) {
+        self.isApplicationWritable = isApplicationWritable
+        self.direct = direct
+        self.privileged = privileged
+    }
+
+    func apply(applicationURL: URL, iconURL: URL) async throws {
+        let applier = isApplicationWritable(applicationURL) ? direct : privileged
+        try await applier.apply(applicationURL: applicationURL, iconURL: iconURL)
+    }
+}
+
 struct DirectIconApplier: IconApplying, Sendable {
     enum InputError: Error, Equatable, Sendable {
         case invalidApplicationURL

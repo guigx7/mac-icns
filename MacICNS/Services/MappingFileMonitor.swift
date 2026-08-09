@@ -245,6 +245,21 @@ private let mappingFileMonitorCallback: FSEventStreamCallback = { _, info, event
     }
 
     let context = Unmanaged<FSEventCallbackContext>.fromOpaque(info).takeUnretainedValue()
-    let eventPaths = unsafeBitCast(paths, to: NSArray.self) as? [String] ?? []
-    context.handler(Array(eventPaths.prefix(Int(eventCount))))
+    context.handler(FSEventPathDecoder.decode(paths, count: Int(eventCount)))
+}
+
+enum FSEventPathDecoder {
+    static func decode(_ rawPaths: UnsafeMutableRawPointer, count: Int) -> [String] {
+        guard count > 0 else {
+            return []
+        }
+
+        let pathPointers = rawPaths.assumingMemoryBound(to: UnsafePointer<CChar>?.self)
+        return (0 ..< count).compactMap { index in
+            guard let path = pathPointers[index] else {
+                return nil
+            }
+            return String(cString: path)
+        }
+    }
 }

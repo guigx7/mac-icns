@@ -73,8 +73,15 @@ private struct MappingRowView: View {
                 Text(mapping.status.displayName)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(mapping.status == .needsPermission ? .orange : .secondary)
-                Button("Apply", action: apply)
+                if mapping.status == .needsPermission {
+                    SettingsLink {
+                        Text("Set Up Helper")
+                    }
                     .controlSize(.small)
+                } else {
+                    Button("Apply", action: apply)
+                        .controlSize(.small)
+                }
             }
         }
         .padding(.vertical, 4)
@@ -109,7 +116,7 @@ private struct MappingEditorView: View {
                 chooseIcon()
             }
 
-            Text("Mappings are saved locally. Protected applications report “Needs permission”; this version does not request elevation.")
+            Text("Mappings are saved locally. Protected applications use the privileged helper configured in Settings.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

@@ -3,6 +3,44 @@ import XCTest
 @testable import MacICNS
 
 final class DirectIconApplierTests: XCTestCase {
+    func testRouterUsesDirectApplierForWritableApplication() async throws {
+        let direct = RecordingIconApplier()
+        let privileged = RecordingIconApplier()
+        let router = IconApplierRouter(
+            isApplicationWritable: { _ in true },
+            direct: direct,
+            privileged: privileged
+        )
+        let applicationURL = URL(filePath: "/tmp/Example.app")
+        let iconURL = URL(filePath: "/tmp/Icon.icns")
+
+        try await router.apply(applicationURL: applicationURL, iconURL: iconURL)
+
+        let directApplications = await direct.recordedApplications()
+        let privilegedApplications = await privileged.recordedApplications()
+        XCTAssertEqual(directApplications, [applicationURL])
+        XCTAssertEqual(privilegedApplications, [])
+    }
+
+    func testRouterUsesPrivilegedHelperForProtectedApplication() async throws {
+        let direct = RecordingIconApplier()
+        let privileged = RecordingIconApplier()
+        let router = IconApplierRouter(
+            isApplicationWritable: { _ in false },
+            direct: direct,
+            privileged: privileged
+        )
+        let applicationURL = URL(filePath: "/Applications/Example.app")
+        let iconURL = URL(filePath: "/tmp/Icon.icns")
+
+        try await router.apply(applicationURL: applicationURL, iconURL: iconURL)
+
+        let directApplications = await direct.recordedApplications()
+        let privilegedApplications = await privileged.recordedApplications()
+        XCTAssertEqual(directApplications, [])
+        XCTAssertEqual(privilegedApplications, [applicationURL])
+    }
+
     func testRejectsANonApplicationBundle() async {
         let applier = DirectIconApplier(
             isApplicationWritable: { _ in true },
@@ -52,6 +90,18 @@ final class DirectIconApplierTests: XCTestCase {
         let repaired = await coordinator.repair(mapping, reason: .manual)
 
         XCTAssertEqual(repaired.status, .needsPermission)
+    }
+}
+
+private actor RecordingIconApplier: IconApplying {
+    private var applications: [URL] = []
+
+    func apply(applicationURL: URL, iconURL _: URL) async throws {
+        applications.append(applicationURL)
+    }
+
+    func recordedApplications() -> [URL] {
+        applications
     }
 }
 

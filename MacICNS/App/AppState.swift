@@ -6,11 +6,13 @@ final class AppState: ObservableObject {
     @Published private(set) var mappings: [IconMapping] = []
     @Published private(set) var persistenceError: String?
     @Published private(set) var helperStatus: HelperInstallationService.Status
+    @Published private(set) var helperError: String?
 
     private let repository: any MappingRepository
     private let repairCoordinator: RepairCoordinator
     private let helperInstallationService: HelperInstallationService
     private let diagnosticLogger: DiagnosticLogger
+    private var hasLaunched = false
     private lazy var monitor = MappingFileMonitor(repairCoordinator: repairCoordinator) { [weak self] mapping in
         guard let self else {
             return
@@ -21,7 +23,7 @@ final class AppState: ObservableObject {
 
     init(
         repository: any MappingRepository = JSONMappingRepository(),
-        repairCoordinator: RepairCoordinator = RepairCoordinator(applier: DirectIconApplier()),
+        repairCoordinator: RepairCoordinator = RepairCoordinator(applier: IconApplierRouter()),
         helperInstallationService: HelperInstallationService = HelperInstallationService(),
         diagnosticLogger: DiagnosticLogger = DiagnosticLogger()
     ) {
@@ -33,6 +35,10 @@ final class AppState: ObservableObject {
     }
 
     func launch() {
+        guard !hasLaunched else {
+            return
+        }
+        hasLaunched = true
         refreshHelperStatus()
         loadMappings()
     }
@@ -93,9 +99,29 @@ final class AppState: ObservableObject {
     }
 
     func refreshHelperStatus() {
+        let previousStatus = helperStatus
         helperStatus = helperInstallationService.status
+        helperError = nil
         if helperStatus == .requiresApproval {
             recordDiagnostic("Privileged helper requires approval.")
+        }
+        if previousStatus != .installed, helperStatus == .installed {
+            recordDiagnostic("Privileged helper became available; refreshing icons.")
+            Task { [weak self] in
+                await self?.refreshAll()
+            }
+        }
+    }
+
+    func installHelper() {
+        do {
+            try helperInstallationService.install()
+            helperError = nil
+            recordDiagnostic("Privileged helper registration requested.")
+            refreshHelperStatus()
+        } catch {
+            helperError = "Could not install the helper: \(error.localizedDescription)"
+            recordDiagnostic("Could not install privileged helper: \(error.localizedDescription)")
         }
     }
 
