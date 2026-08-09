@@ -35,4 +35,37 @@ final class JSONMappingRepositoryTests: XCTestCase {
 
         XCTAssertEqual(try repository.load(), [])
     }
+
+    func testLegacyMappingWithoutEnabledFieldDefaultsToEnabled() throws {
+        let url = temporaryDirectory.appending(path: "mappings.json")
+        let json = """
+        [{
+          "id":"00000000-0000-0000-0000-000000000001",
+          "applicationURL":"file:///Applications/Test.app/",
+          "bundleIdentifier":"com.example.Test",
+          "iconURL":"file:///tmp/Test.icns",
+          "status":"upToDate"
+        }]
+        """
+        try Data(json.utf8).write(to: url)
+
+        let mapping = try JSONMappingRepository(fileURL: url).load().first
+
+        XCTAssertEqual(mapping?.isEnabled, true)
+    }
+
+    func testRoundTripPreservesDisabledState() throws {
+        let url = temporaryDirectory.appending(path: "mappings.json")
+        let repository = JSONMappingRepository(fileURL: url)
+        var mapping = IconMapping(
+            applicationURL: URL(filePath: "/Applications/Test.app"),
+            bundleIdentifier: "com.example.Test",
+            iconURL: URL(filePath: "/tmp/Test.icns")
+        )
+        mapping.isEnabled = false
+
+        try repository.save([mapping])
+
+        XCTAssertEqual(try repository.load().first?.isEnabled, false)
+    }
 }
