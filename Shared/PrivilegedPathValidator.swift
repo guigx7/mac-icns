@@ -7,37 +7,73 @@ enum PrivilegedPathValidator {
         case unsafePath
     }
 
-    /// A pathname can only be passed to NSWorkspace after each component is protected
-    /// from replacement by any unprivileged user. This makes the later pathname operation
-    /// safe from symlink or rename races despite NSWorkspace accepting a pathname, not a
-    /// file descriptor.
     static func validate(applicationURL: URL) throws {
-        var path = "/"
+        let descriptor = try openApplicationDirectory(applicationURL: applicationURL)
+        close(descriptor)
+    }
 
-        for component in applicationURL.standardizedFileURL.pathComponents.dropFirst() {
-            path = (path as NSString).appendingPathComponent(component)
+    /// Returns an owned descriptor for a validated application directory. The caller
+    /// must close it. Walking from an already-open parent means mutable ancestors cannot
+    /// redirect later component lookups.
+    static func openApplicationDirectory(
+        applicationURL: URL,
+        requiredOwnerUID: uid_t = 0
+    ) throws -> Int32 {
+        let path = applicationURL.path
+        let pathComponents = (path as NSString).pathComponents
+        guard applicationURL.isFileURL,
+              path.hasPrefix("/"),
+              (path as NSString).pathExtension.lowercased() == "app",
+              !pathComponents.contains("."),
+              !pathComponents.contains("..")
+        else {
+            throw ValidationError.unsafePath
+        }
+
+        var currentDescriptor = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        guard currentDescriptor >= 0 else {
+            throw ValidationError.unsafePath
+        }
+
+        do {
+            for component in pathComponents.dropFirst() {
+                let nextDescriptor = openat(
+                    currentDescriptor,
+                    component,
+                    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+                )
+                guard nextDescriptor >= 0 else {
+                    throw ValidationError.unsafePath
+                }
+
+                close(currentDescriptor)
+                currentDescriptor = nextDescriptor
+            }
+
             var metadata = stat()
-            guard lstat(path, &metadata) == 0 else {
+            guard fstat(currentDescriptor, &metadata) == 0,
+                  (metadata.st_mode & S_IFMT) == S_IFDIR
+            else {
                 throw ValidationError.unsafePath
             }
-            guard (metadata.st_mode & S_IFMT) != S_IFLNK else {
-                throw ValidationError.unsafePath
-            }
-            guard metadata.st_uid == 0,
+
+            guard metadata.st_uid == requiredOwnerUID,
                   (metadata.st_mode & (S_IWGRP | S_IWOTH)) == 0,
-                  !hasExtendedACL(at: path)
+                  !hasExtendedACL(descriptor: currentDescriptor)
             else {
                 throw ValidationError.targetIsMutableByUnprivilegedUser
             }
+
+            return currentDescriptor
+        } catch {
+            close(currentDescriptor)
+            throw error
         }
     }
 
-    /// Conservatively reject a path that carries an extended ACL. ACLs can grant write
-    /// access independently of the POSIX mode bits, so accepting one would reintroduce
-    /// a replacement race before the pathname-only NSWorkspace call.
-    private static func hasExtendedACL(at path: String) -> Bool {
+    private static func hasExtendedACL(descriptor: Int32) -> Bool {
         errno = 0
-        guard let accessControlList = acl_get_link_np(path, ACL_TYPE_EXTENDED) else {
+        guard let accessControlList = acl_get_fd_np(descriptor, ACL_TYPE_EXTENDED) else {
             return errno != ENOENT && errno != ENOATTR
         }
         defer { acl_free(UnsafeMutableRawPointer(accessControlList)) }

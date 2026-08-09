@@ -51,6 +51,7 @@
 		AA0000000000000000000001 /* ApplicationIconProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ApplicationIconProviderTests.swift */; };
 		AA0000000000000000000002 /* ApplicationIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ApplicationIconProvider.swift */; };
 		AA0000000000000000000003 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000014 /* AppIcon.icns */; };
+		AB0000000000000000000001 /* PrivilegedIconWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000011 /* PrivilegedIconWriterTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -138,6 +139,7 @@
 		AA0000000000000000000012 /* ApplicationIconProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationIconProvider.swift; sourceTree = "<group>"; };
 		AA0000000000000000000013 /* AppIconSource.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIconSource.png; sourceTree = "<group>"; };
 		AA0000000000000000000014 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		AB0000000000000000000011 /* PrivilegedIconWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedIconWriterTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -212,6 +214,7 @@
 				A80000000000000000000011 /* RepairSchedulerTests.swift */,
 				A90000000000000000000011 /* DiagnosticLoggerTests.swift */,
 				AA0000000000000000000011 /* ApplicationIconProviderTests.swift */,
+				AB0000000000000000000011 /* PrivilegedIconWriterTests.swift */,
 			);
 			path = MacICNSTests;
 			sourceTree = "<group>";
@@ -478,6 +481,7 @@
 				A70000000000000000000002 /* IconDataReaderTests.swift in Sources */,
 				A80000000000000000000001 /* RepairSchedulerTests.swift in Sources */,
 				A90000000000000000000001 /* DiagnosticLoggerTests.swift in Sources */,
+				AB0000000000000000000001 /* PrivilegedIconWriterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
