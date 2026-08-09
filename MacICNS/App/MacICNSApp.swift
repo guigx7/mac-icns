@@ -3,11 +3,14 @@ import SwiftUI
 
 @main
 struct MacICNSApp: App {
+    private static let managementWindowID = "management"
+
     @StateObject private var appState = AppState()
     @StateObject private var loginItemService = LoginItemService()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: Self.managementWindowID) {
             MappingListView(appState: appState)
                 .task {
                     guard NSClassFromString("XCTestCase") == nil else {
@@ -42,8 +45,8 @@ struct MacICNSApp: App {
     }
 
     private func focusMainWindow() {
+        openWindow(id: Self.managementWindowID)
         NSApplication.shared.activate(ignoringOtherApps: true)
-        NSApplication.shared.windows.first(where: { $0.canBecomeKey })?.makeKeyAndOrderFront(nil)
     }
 }
 
