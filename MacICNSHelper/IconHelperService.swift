@@ -4,9 +4,14 @@ import Foundation
 final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCProtocol {
     private let listener = NSXPCListener(machServiceName: "com.guigx.macicns.helper")
     private let clientValidator: ClientValidator
+    private let iconOperation: PrivilegedIconOperation
 
-    init(clientValidator: ClientValidator = ClientValidator()) {
+    init(
+        clientValidator: ClientValidator = ClientValidator(),
+        iconOperation: PrivilegedIconOperation = PrivilegedIconOperation()
+    ) {
         self.clientValidator = clientValidator
+        self.iconOperation = iconOperation
         super.init()
         listener.delegate = self
     }
@@ -37,17 +42,8 @@ final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCPro
                 reply(helperError(code: 1, description: "The caller could not be identified."))
                 return
             }
-            try PrivilegedPathValidator.validate(
-                applicationURL: validatedRequest.applicationURL
-            )
-            let image = try IconDataReader.image(at: validatedRequest.iconURL)
-
-            let succeeded = NSWorkspace.shared.setIcon(
-                image,
-                forFile: validatedRequest.applicationURL.path,
-                options: []
-            )
-            reply(succeeded ? nil : helperError(code: 3, description: "The icon could not be applied."))
+            try iconOperation.apply(request: validatedRequest)
+            reply(nil)
         } catch {
             reply(error as NSError)
         }
@@ -60,13 +56,8 @@ final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCPro
                 reply(helperError(code: 1, description: "The caller could not be identified."))
                 return
             }
-            try PrivilegedPathValidator.validate(applicationURL: validatedRequest.applicationURL)
-            let succeeded = NSWorkspace.shared.setIcon(
-                nil,
-                forFile: validatedRequest.applicationURL.path,
-                options: []
-            )
-            reply(succeeded ? nil : helperError(code: 4, description: "The icon could not be restored."))
+            try iconOperation.reset(request: validatedRequest)
+            reply(nil)
         } catch {
             reply(error as NSError)
         }

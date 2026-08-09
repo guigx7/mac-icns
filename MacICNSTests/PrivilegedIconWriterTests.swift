@@ -8,7 +8,9 @@ final class PrivilegedIconWriterTests: XCTestCase {
     private var temporaryDirectory: URL!
 
     override func setUpWithError() throws {
-        temporaryDirectory = URL(filePath: "/private/tmp", directoryHint: .isDirectory)
+        temporaryDirectory = try XCTUnwrap(
+            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        )
             .appending(path: "MacICNS-PrivilegedIconWriter-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(
             at: temporaryDirectory,
@@ -178,6 +180,58 @@ final class PrivilegedIconWriterTests: XCTestCase {
             )
         )
         XCTAssertEqual(try Data(contentsOf: outsideFileURL), Data("unchanged".utf8))
+    }
+
+    func testPrivilegedOperationAppliesValidatedRequest() throws {
+        let applicationURL = try makeApplication(named: "OperationApply.app")
+        let request = try IconApplyRequest(applicationURL: applicationURL, iconURL: systemIconURL)
+        let operation = PrivilegedIconOperation(requiredOwnerUID: getuid())
+
+        try operation.apply(request: request)
+
+        let descriptor = try PrivilegedPathValidator.openApplicationDirectory(
+            applicationURL: applicationURL,
+            requiredOwnerUID: getuid()
+        )
+        defer { close(descriptor) }
+        XCTAssertEqual(finderFlags(descriptor: descriptor) & 0x0400, 0x0400)
+        let iconDescriptor = openat(descriptor, "Icon\r", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        XCTAssertGreaterThanOrEqual(iconDescriptor, 0)
+        if iconDescriptor >= 0 { close(iconDescriptor) }
+    }
+
+    func testPrivilegedOperationResetsValidatedRequest() throws {
+        let applicationURL = try makeApplication(named: "OperationReset.app")
+        let applyRequest = try IconApplyRequest(applicationURL: applicationURL, iconURL: systemIconURL)
+        let resetRequest = try IconResetRequest(applicationURL: applicationURL)
+        let operation = PrivilegedIconOperation(requiredOwnerUID: getuid())
+        try operation.apply(request: applyRequest)
+
+        try operation.reset(request: resetRequest)
+
+        let descriptor = try PrivilegedPathValidator.openApplicationDirectory(
+            applicationURL: applicationURL,
+            requiredOwnerUID: getuid()
+        )
+        defer { close(descriptor) }
+        XCTAssertEqual(finderFlags(descriptor: descriptor) & 0x0400, 0)
+        errno = 0
+        XCTAssertEqual(openat(descriptor, "Icon\r", O_RDONLY | O_NOFOLLOW | O_CLOEXEC), -1)
+        XCTAssertEqual(errno, ENOENT)
+    }
+
+    func testPrivilegedOperationRejectsWritableTarget() throws {
+        let applicationURL = try makeApplication(named: "OperationWritable.app")
+        let request = try IconApplyRequest(applicationURL: applicationURL, iconURL: systemIconURL)
+        XCTAssertEqual(chmod(applicationURL.path, 0o777), 0)
+        let operation = PrivilegedIconOperation(requiredOwnerUID: getuid())
+
+        XCTAssertThrowsError(try operation.apply(request: request)) { error in
+            XCTAssertEqual(
+                error as? PrivilegedPathValidator.ValidationError,
+                .targetIsMutableByUnprivilegedUser
+            )
+        }
     }
 
     private func makeApplication(named name: String) throws -> URL {
