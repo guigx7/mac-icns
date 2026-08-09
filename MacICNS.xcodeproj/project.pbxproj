@@ -50,6 +50,7 @@
 		A90000000000000000000003 /* LoginItemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000013 /* LoginItemService.swift */; };
 		AA0000000000000000000001 /* ApplicationIconProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ApplicationIconProviderTests.swift */; };
 		AA0000000000000000000002 /* ApplicationIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ApplicationIconProvider.swift */; };
+		AA0000000000000000000003 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000014 /* AppIcon.icns */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -135,6 +136,8 @@
 		A90000000000000000000013 /* LoginItemService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemService.swift; sourceTree = "<group>"; };
 		AA0000000000000000000011 /* ApplicationIconProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationIconProviderTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* ApplicationIconProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationIconProvider.swift; sourceTree = "<group>"; };
+		AA0000000000000000000013 /* AppIconSource.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIconSource.png; sourceTree = "<group>"; };
+		AA0000000000000000000014 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -216,6 +219,7 @@
 		A10000000000000000000045 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000013 /* AppIconSource.png */,
 				A10000000000000000000048 /* LaunchDaemons */,
 			);
 			path = Resources;
@@ -234,6 +238,7 @@
 		A10000000000000000000047 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000014 /* AppIcon.icns */,
 				A10000000000000000000011 /* MacICNSApp.swift */,
 				A40000000000000000000013 /* AppState.swift */,
 			);
@@ -313,6 +318,7 @@
 			buildPhases = (
 				A10000000000000000000091 /* Sources */,
 				A10000000000000000000071 /* Frameworks */,
+				A10000000000000000000094 /* Resources */,
 				A10000000000000000000061 /* Copy Helper */,
 				A10000000000000000000062 /* Copy LaunchDaemon */,
 			);
@@ -400,6 +406,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000094 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000003 /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A10000000000000000000091 /* Sources */ = {
