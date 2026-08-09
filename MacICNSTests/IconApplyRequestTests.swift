@@ -38,6 +38,42 @@ final class IconApplyRequestTests: XCTestCase {
         XCTAssertNoThrow(try PrivilegedPathValidator.validate(applicationURL: protectedApplicationURL))
     }
 
+    func testResetAcceptsAnExistingApplication() throws {
+        let protectedApplicationURL = URL(
+            filePath: "/System/Applications/App Store.app",
+            directoryHint: .isDirectory
+        )
+
+        let request = try IconResetRequest(applicationURL: protectedApplicationURL)
+
+        XCTAssertEqual(request.applicationURL, protectedApplicationURL.standardizedFileURL)
+    }
+
+    func testResetRejectsNonApplicationTarget() throws {
+        let regularFileURL = temporaryDirectory.appending(path: "NotAnApp.app")
+        try Data().write(to: regularFileURL)
+
+        XCTAssertThrowsError(try IconResetRequest(applicationURL: regularFileURL))
+    }
+
+    func testResetRejectsLeafSymlink() throws {
+        let symlinkURL = temporaryDirectory.appending(path: "ResetLinked.app")
+        try FileManager.default.createSymbolicLink(at: symlinkURL, withDestinationURL: applicationURL)
+
+        XCTAssertThrowsError(try IconResetRequest(applicationURL: symlinkURL))
+    }
+
+    func testResetRejectsIntermediateSymlink() throws {
+        let symlinkDirectoryURL = temporaryDirectory.appending(path: "ResetAlias", directoryHint: .isDirectory)
+        try FileManager.default.createSymbolicLink(at: symlinkDirectoryURL, withDestinationURL: temporaryDirectory)
+
+        XCTAssertThrowsError(
+            try IconResetRequest(
+                applicationURL: symlinkDirectoryURL.appending(path: "Example.app", directoryHint: .isDirectory)
+            )
+        )
+    }
+
     func testRejectsNonApplicationTarget() throws {
         let regularFileURL = temporaryDirectory.appending(path: "NotAnApp.app")
         try Data().write(to: regularFileURL)

@@ -39,7 +39,7 @@ final class IconApplyRequest: NSObject, NSSecureCoding, @unchecked Sendable {
         coder.encode(iconURL as NSURL, forKey: "iconURL")
     }
 
-    private static func validateApplicationURL(_ url: URL) throws -> URL {
+    fileprivate static func validateApplicationURL(_ url: URL) throws -> URL {
         let standardizedURL = try validatedStandardFileURL(url)
         guard standardizedURL.pathExtension.caseInsensitiveCompare("app") == .orderedSame,
               isExistingDirectory(standardizedURL)
@@ -95,5 +95,32 @@ final class IconApplyRequest: NSObject, NSSecureCoding, @unchecked Sendable {
             return false
         }
         return values.isRegularFile == true
+    }
+}
+
+@objc(IconResetRequest)
+final class IconResetRequest: NSObject, NSSecureCoding, @unchecked Sendable {
+    static var supportsSecureCoding: Bool { true }
+
+    let applicationURL: URL
+
+    init(applicationURL: URL) throws {
+        self.applicationURL = try IconApplyRequest.validateApplicationURL(applicationURL)
+        super.init()
+    }
+
+    required convenience init?(coder: NSCoder) {
+        guard let applicationURL = coder.decodeObject(of: NSURL.self, forKey: "applicationURL") as URL? else {
+            return nil
+        }
+        do {
+            try self.init(applicationURL: applicationURL)
+        } catch {
+            return nil
+        }
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(applicationURL as NSURL, forKey: "applicationURL")
     }
 }

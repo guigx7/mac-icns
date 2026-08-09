@@ -723,6 +723,8 @@ private actor BlockingApplicationApplier: IconApplying {
         }
     }
 
+    func reset(applicationURL _: URL) async throws {}
+
     func waitUntilBlocked() async -> Bool {
         for _ in 0 ..< 100 {
             if blocked {
@@ -936,4 +938,5 @@ private final class FakeMappingEventStream: MappingEventStream {
 
 private struct NoopApplier: IconApplying {
     func apply(applicationURL _: URL, iconURL _: URL) async throws {}
+    func reset(applicationURL _: URL) async throws {}
 }

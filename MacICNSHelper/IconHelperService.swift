@@ -53,6 +53,25 @@ final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCPro
         }
     }
 
+    func resetIcon(_ request: IconResetRequest, withReply reply: @escaping (NSError?) -> Void) {
+        do {
+            let validatedRequest = try IconResetRequest(applicationURL: request.applicationURL)
+            guard NSXPCConnection.current() != nil else {
+                reply(helperError(code: 1, description: "The caller could not be identified."))
+                return
+            }
+            try PrivilegedPathValidator.validate(applicationURL: validatedRequest.applicationURL)
+            let succeeded = NSWorkspace.shared.setIcon(
+                nil,
+                forFile: validatedRequest.applicationURL.path,
+                options: []
+            )
+            reply(succeeded ? nil : helperError(code: 4, description: "The icon could not be restored."))
+        } catch {
+            reply(error as NSError)
+        }
+    }
+
     private func helperError(code: Int, description: String) -> NSError {
         NSError(domain: "com.guigx.macicns.helper", code: code, userInfo: [NSLocalizedDescriptionKey: description])
     }

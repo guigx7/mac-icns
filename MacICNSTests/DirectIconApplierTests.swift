@@ -3,6 +3,60 @@ import XCTest
 @testable import MacICNS
 
 final class DirectIconApplierTests: XCTestCase {
+    func testDirectResetClearsTheFinderCustomIcon() async throws {
+        let applicationURL = URL(filePath: "/tmp/Example.app")
+        let recorder = URLRecorder()
+        let applier = DirectIconApplier(
+            isApplicationWritable: { _ in true },
+            setIcon: { _, _ in true },
+            resetIcon: { url in
+                await recorder.record(url)
+                return true
+            }
+        )
+
+        try await applier.reset(applicationURL: applicationURL)
+
+        let recordedURLs = await recorder.urls
+        XCTAssertEqual(recordedURLs, [applicationURL])
+    }
+
+    func testRouterUsesDirectResetForWritableApplication() async throws {
+        let direct = RecordingIconApplier()
+        let privileged = RecordingIconApplier()
+        let router = IconApplierRouter(
+            isApplicationWritable: { _ in true },
+            direct: direct,
+            privileged: privileged
+        )
+        let applicationURL = URL(filePath: "/tmp/Example.app")
+
+        try await router.reset(applicationURL: applicationURL)
+
+        let directResets = await direct.recordedResets()
+        let privilegedResets = await privileged.recordedResets()
+        XCTAssertEqual(directResets, [applicationURL])
+        XCTAssertEqual(privilegedResets, [])
+    }
+
+    func testRouterUsesPrivilegedResetForProtectedApplication() async throws {
+        let direct = RecordingIconApplier()
+        let privileged = RecordingIconApplier()
+        let router = IconApplierRouter(
+            isApplicationWritable: { _ in false },
+            direct: direct,
+            privileged: privileged
+        )
+        let applicationURL = URL(filePath: "/Applications/Example.app")
+
+        try await router.reset(applicationURL: applicationURL)
+
+        let directResets = await direct.recordedResets()
+        let privilegedResets = await privileged.recordedResets()
+        XCTAssertEqual(directResets, [])
+        XCTAssertEqual(privilegedResets, [applicationURL])
+    }
+
     func testRouterUsesDirectApplierForWritableApplication() async throws {
         let direct = RecordingIconApplier()
         let privileged = RecordingIconApplier()
@@ -95,6 +149,7 @@ final class DirectIconApplierTests: XCTestCase {
 
 private actor RecordingIconApplier: IconApplying {
     private var applications: [URL] = []
+    private var resets: [URL] = []
 
     func apply(applicationURL: URL, iconURL _: URL) async throws {
         applications.append(applicationURL)
@@ -102,6 +157,22 @@ private actor RecordingIconApplier: IconApplying {
 
     func recordedApplications() -> [URL] {
         applications
+    }
+
+    func reset(applicationURL: URL) async throws {
+        resets.append(applicationURL)
+    }
+
+    func recordedResets() -> [URL] {
+        resets
+    }
+}
+
+private actor URLRecorder {
+    private(set) var urls: [URL] = []
+
+    func record(_ url: URL) {
+        urls.append(url)
     }
 }
 

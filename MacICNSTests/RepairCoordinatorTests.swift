@@ -235,6 +235,10 @@ private struct ErrorApplier: IconApplying {
     func apply(applicationURL: URL, iconURL: URL) async throws {
         throw error
     }
+
+    func reset(applicationURL: URL) async throws {
+        throw error
+    }
 }
 
 private struct SelectiveErrorApplier: IconApplying {
@@ -245,6 +249,8 @@ private struct SelectiveErrorApplier: IconApplying {
             throw TestError.other
         }
     }
+
+    func reset(applicationURL _: URL) async throws {}
 }
 
 private enum TestError: Error, Sendable {
@@ -258,6 +264,8 @@ private actor DelayingApplier: IconApplying {
         requestCount += 1
         try await Task.sleep(for: .milliseconds(50))
     }
+
+    func reset(applicationURL _: URL) async throws {}
 }
 
 private actor RecordingApplier: IconApplying {
@@ -271,4 +279,6 @@ private actor RecordingApplier: IconApplying {
     func apply(applicationURL: URL, iconURL: URL) async throws {
         requests.append(Request(applicationURL: applicationURL, iconURL: iconURL))
     }
+
+    func reset(applicationURL _: URL) async throws {}
 }

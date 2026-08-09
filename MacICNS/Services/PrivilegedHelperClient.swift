@@ -47,6 +47,41 @@ struct PrivilegedHelperClient: IconApplying, Sendable {
             }
         }
     }
+
+    func reset(applicationURL: URL) async throws {
+        try await reset(IconResetRequest(applicationURL: applicationURL))
+    }
+
+    func reset(_ request: IconResetRequest) async throws {
+        let connection = connectionFactory()
+        let completion = XPCCompletion()
+
+        try await withCheckedThrowingContinuation { continuation in
+            completion.continuation = continuation
+            connection.remoteObjectInterface = NSXPCInterface(with: IconHelperXPCProtocol.self)
+            connection.setCodeSigningRequirement(CodeSigningRequirements.helper)
+            connection.interruptionHandler = {
+                completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
+            }
+            connection.invalidationHandler = {
+                completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
+            }
+            connection.resume()
+
+            guard let helper = connection.remoteObjectProxyWithErrorHandler({ _ in
+                completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
+            }) as? IconHelperXPCProtocol else {
+                completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
+                connection.invalidate()
+                return
+            }
+
+            helper.resetIcon(request) { error in
+                completion.finish(error.map { .failure($0) } ?? .success(()))
+                connection.invalidate()
+            }
+        }
+    }
 }
 
 private final class XPCCompletion: @unchecked Sendable {

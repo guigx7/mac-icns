@@ -18,4 +18,5 @@ protocol ApplicationLocating: Sendable {
 
 protocol IconApplying: Sendable {
     func apply(applicationURL: URL, iconURL: URL) async throws
+    func reset(applicationURL: URL) async throws
 }
