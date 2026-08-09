@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct MappingListView: View {
     @ObservedObject var appState: AppState
     @State private var isPresentingEditor = false
+    @State private var mappingPendingDeletion: IconMapping?
+    private let iconProvider = ApplicationIconProvider()
 
     var body: some View {
         NavigationStack {
@@ -18,11 +20,18 @@ struct MappingListView: View {
                 } else {
                     List {
                         ForEach(appState.mappings) { mapping in
-                            MappingRowView(mapping: mapping) {
-                                Task { await appState.apply(mapping) }
-                            }
+                            MappingRowView(
+                                mapping: mapping,
+                                originalIcon: iconProvider.originalIcon(for: mapping.applicationURL),
+                                customIcon: iconProvider.customIcon(at: mapping.iconURL),
+                                isBusy: appState.isBusy(mapping),
+                                apply: { Task { await appState.apply(mapping) } },
+                                setEnabled: { isEnabled in
+                                    Task { await appState.setEnabled(isEnabled, for: mapping) }
+                                },
+                                delete: { mappingPendingDeletion = mapping }
+                            )
                         }
-                        .onDelete(perform: appState.removeMappings)
                     }
                 }
             }
@@ -46,45 +55,129 @@ struct MappingListView: View {
             } message: {
                 Text(appState.persistenceError ?? "")
             }
+            .alert("Could Not Complete Action", isPresented: Binding(
+                get: { appState.operationError != nil },
+                set: { if !$0 { appState.dismissOperationError() } }
+            )) {
+                Button("OK") { appState.dismissOperationError() }
+            } message: {
+                Text(appState.operationError ?? "")
+            }
+            .alert(
+                "Delete Icon Mapping?",
+                isPresented: Binding(
+                    get: { mappingPendingDeletion != nil },
+                    set: { if !$0 { mappingPendingDeletion = nil } }
+                ),
+                presenting: mappingPendingDeletion
+            ) { mapping in
+                Button("Delete", role: .destructive) {
+                    mappingPendingDeletion = nil
+                    Task { await appState.delete(mapping) }
+                }
+                Button("Cancel", role: .cancel) {
+                    mappingPendingDeletion = nil
+                }
+            } message: { mapping in
+                Text("MacICNS will restore the original icon for \(mapping.applicationURL.deletingPathExtension().lastPathComponent) before deleting this mapping.")
+            }
         }
     }
 }
 
 private struct MappingRowView: View {
     let mapping: IconMapping
+    let originalIcon: NSImage
+    let customIcon: NSImage
+    let isBusy: Bool
     let apply: () -> Void
+    let setEnabled: (Bool) -> Void
+    let delete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: mapping.applicationURL.path))
-                .resizable()
-                .frame(width: 32, height: 32)
+        HStack(spacing: 16) {
+            HStack(spacing: 8) {
+                iconPreview(originalIcon, accessibilityLabel: "Original icon")
 
-            VStack(alignment: .leading, spacing: 3) {
+                Image(systemName: "arrow.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+
+                iconPreview(customIcon, accessibilityLabel: "Custom icon")
+                    .opacity(mapping.isEnabled ? 1 : 0.45)
+            }
+            .frame(width: 116, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 4) {
                 Text(mapping.applicationURL.deletingPathExtension().lastPathComponent)
                     .font(.headline)
                 Text(mapping.iconURL.lastPathComponent)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(statusName)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(statusColor)
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 6) {
-                Text(mapping.status.displayName)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(mapping.status == .needsPermission ? .orange : .secondary)
-                if mapping.status == .needsPermission {
+            if isBusy {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Updating icon")
+            }
+
+            HStack(spacing: 10) {
+                if mapping.status == .needsPermission, mapping.isEnabled {
                     SettingsLink {
                         Text("Set Up Helper")
                     }
                     .controlSize(.small)
-                } else {
-                    Button("Apply", action: apply)
-                        .controlSize(.small)
+                } else if mapping.isEnabled {
+                    Button(action: apply) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .help("Apply Custom Icon Again")
+                    .accessibilityLabel("Apply custom icon again")
                 }
+
+                Toggle("Enabled", isOn: Binding(
+                    get: { mapping.isEnabled },
+                    set: { newValue in setEnabled(newValue) }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help(mapping.isEnabled ? "Restore Original Icon" : "Apply Custom Icon")
+
+                Button(role: .destructive, action: delete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Delete Mapping")
+                .accessibilityLabel("Delete mapping")
             }
+            .disabled(isBusy)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
+    }
+
+    private var statusName: String {
+        mapping.isEnabled ? mapping.status.displayName : "Disabled"
+    }
+
+    private var statusColor: Color {
+        mapping.isEnabled && mapping.status == .needsPermission ? .orange : .secondary
+    }
+
+    private func iconPreview(_ image: NSImage, accessibilityLabel: String) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 40, height: 40)
+            .accessibilityLabel(accessibilityLabel)
     }
 }
 

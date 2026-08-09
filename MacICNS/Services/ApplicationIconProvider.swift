@@ -8,8 +8,8 @@ struct ApplicationIconProvider {
 
     init(
         imageLoader: @escaping (URL) -> NSImage? = { NSImage(contentsOf: $0) },
-        workspaceIconLoader: @escaping (String) -> NSImage = {
-            NSWorkspace.shared.icon(forFile: $0)
+        workspaceIconLoader: @escaping (String) -> NSImage = { _ in
+            NSWorkspace.shared.icon(for: .applicationBundle)
         }
     ) {
         self.imageLoader = imageLoader
