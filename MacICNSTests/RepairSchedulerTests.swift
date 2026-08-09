@@ -113,6 +113,35 @@ final class RepairSchedulerTests: XCTestCase {
     }
 
     @MainActor
+    func testMonitorExcludesDisabledMappings() async {
+        let clock = TestClock()
+        let streamFactory = RecordingStreamFactory()
+        let monitor = MappingFileMonitor(
+            repairCoordinator: RepairCoordinator(applier: NoopApplier()),
+            streamFactory: streamFactory.make,
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
+            }
+        )
+        let enabledMapping = makeMapping(applicationPath: "/Applications/Enabled.app")
+        var disabledMapping = makeMapping(applicationPath: "/Users/example/Applications/Disabled.app")
+        disabledMapping.isEnabled = false
+
+        await monitor.start(mappings: [enabledMapping, disabledMapping])
+        await monitor.process(eventsAtPaths: [disabledMapping.applicationURL.path], generation: 1)
+        for _ in 0 ..< 10 { await Task.yield() }
+
+        XCTAssertEqual(streamFactory.directorySets, [["/Applications"]])
+        let requestedDurations = await clock.requestedDurations
+        XCTAssertTrue(requestedDurations.isEmpty)
+    }
+
+    @MainActor
     func testCancelAllSuppressesQueuedRepair() async {
         let clock = TestClock()
         let recorder = RepairRecorder()

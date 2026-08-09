@@ -88,7 +88,7 @@ final class MappingFileMonitor {
             return
         }
 
-        let directories = Set(mappings.map {
+        let directories = Set(mappings.filter(\.isEnabled).map {
             $0.applicationURL.deletingLastPathComponent().standardizedFileURL.path
         })
         guard !directories.isEmpty else {
@@ -138,6 +138,9 @@ final class MappingFileMonitor {
     private func affectedMappingIDs(forEventAtPath path: String) -> [UUID] {
         let eventPath = URL(filePath: path).standardizedFileURL.path
         return mappingsByID.values.compactMap { mapping in
+            guard mapping.isEnabled else {
+                return nil
+            }
             let applicationPath = mapping.applicationURL.standardizedFileURL.path
             let parentPath = mapping.applicationURL
                 .deletingLastPathComponent()
@@ -195,10 +198,26 @@ private final class FSEventCallbackContext: @unchecked Sendable {
     }
 }
 
+private func retainFSEventCallbackContext(_ info: UnsafeRawPointer?) -> UnsafeRawPointer? {
+    guard let info else {
+        return nil
+    }
+    return UnsafeRawPointer(
+        Unmanaged<FSEventCallbackContext>.fromOpaque(info).retain().toOpaque()
+    )
+}
+
+private func releaseFSEventCallbackContext(_ info: UnsafeRawPointer?) {
+    guard let info else {
+        return
+    }
+    Unmanaged<FSEventCallbackContext>.fromOpaque(info).release()
+}
+
 @MainActor
 private final class FSEventMappingEventStream: MappingEventStream {
     private let callbackContext: FSEventCallbackContext
-    private let stream: FSEventStreamRef?
+    nonisolated(unsafe) private var stream: FSEventStreamRef?
     private let queue = DispatchQueue(label: "com.guigx.macicns.mapping-file-monitor")
 
     init(directories: Set<String>, handler: @escaping @Sendable ([String]) -> Void) {
@@ -206,8 +225,8 @@ private final class FSEventMappingEventStream: MappingEventStream {
         var context = FSEventStreamContext(
             version: 0,
             info: Unmanaged.passUnretained(callbackContext).toOpaque(),
-            retain: nil,
-            release: nil,
+            retain: retainFSEventCallbackContext,
+            release: releaseFSEventCallbackContext,
             copyDescription: nil
         )
         stream = FSEventStreamCreate(
@@ -230,6 +249,16 @@ private final class FSEventMappingEventStream: MappingEventStream {
     }
 
     func stop() {
+        guard let stream else {
+            return
+        }
+        self.stream = nil
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+    }
+
+    deinit {
         guard let stream else {
             return
         }

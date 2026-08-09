@@ -44,6 +44,100 @@ final class RepairCoordinatorTests: XCTestCase {
         XCTAssertEqual(repaired.status, .upToDate)
     }
 
+    func testRepairSkipsDisabledMapping() async throws {
+        var mapping = makeMapping()
+        mapping.isEnabled = false
+        let applier = RecordingApplier()
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "new"),
+            locator: StubLocator(),
+            applier: applier
+        )
+
+        let repaired = await coordinator.repair(mapping, reason: .launch)
+
+        let requests = await applier.requests
+        XCTAssertFalse(repaired.isEnabled)
+        XCTAssertTrue(requests.isEmpty)
+    }
+
+    func testDisablingResetsAndClearsFingerprints() async throws {
+        var mapping = makeMapping()
+        mapping.appFingerprint = "app"
+        mapping.iconFingerprint = "icon"
+        mapping.lastSuccessAt = Date()
+        let applier = RecordingApplier()
+        let coordinator = RepairCoordinator(applier: applier)
+
+        let updated = await coordinator.setEnabled(false, for: mapping)
+
+        let resets = await applier.resets
+        XCTAssertEqual(resets, [applicationURL])
+        XCTAssertFalse(updated.isEnabled)
+        XCTAssertNil(updated.appFingerprint)
+        XCTAssertNil(updated.iconFingerprint)
+        XCTAssertNil(updated.lastSuccessAt)
+        XCTAssertEqual(updated.status, .upToDate)
+    }
+
+    func testFailedDisablePreservesEnabledState() async throws {
+        let mapping = makeMapping()
+        let coordinator = RepairCoordinator(
+            applier: ErrorApplier(error: CocoaError(.fileWriteNoPermission))
+        )
+
+        let updated = await coordinator.setEnabled(false, for: mapping)
+
+        XCTAssertTrue(updated.isEnabled)
+        XCTAssertEqual(updated.status, .needsPermission)
+    }
+
+    func testEnablingForcesApplyAndOnlyThenPersistsEnabled() async throws {
+        var mapping = makeMapping()
+        mapping.isEnabled = false
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let applier = RecordingApplier()
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "same"),
+            locator: StubLocator(),
+            applier: applier
+        )
+
+        let updated = await coordinator.setEnabled(true, for: mapping)
+
+        let requests = await applier.requests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertTrue(updated.isEnabled)
+        XCTAssertEqual(updated.status, .upToDate)
+    }
+
+    func testFailedEnableRemainsDisabled() async throws {
+        var mapping = makeMapping()
+        mapping.isEnabled = false
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "new"),
+            locator: StubLocator(),
+            applier: ErrorApplier(error: TestError.other)
+        )
+
+        let updated = await coordinator.setEnabled(true, for: mapping)
+
+        XCTAssertFalse(updated.isEnabled)
+        XCTAssertEqual(updated.status, .failed)
+    }
+
+    func testResetForRemovalPropagatesFailure() async throws {
+        let coordinator = RepairCoordinator(applier: ErrorApplier(error: TestError.other))
+
+        do {
+            try await coordinator.resetForRemoval(makeMapping())
+            XCTFail("Expected reset failure to be propagated")
+        } catch {
+            XCTAssertEqual(error as? TestError, .other)
+        }
+    }
+
     func testRepairAppliesChangedFingerprints() async throws {
         var mapping = makeMapping()
         mapping.appFingerprint = "old-app"
@@ -253,7 +347,7 @@ private struct SelectiveErrorApplier: IconApplying {
     func reset(applicationURL _: URL) async throws {}
 }
 
-private enum TestError: Error, Sendable {
+private enum TestError: Error, Equatable, Sendable {
     case other
 }
 
@@ -275,10 +369,13 @@ private actor RecordingApplier: IconApplying {
     }
 
     private(set) var requests: [Request] = []
+    private(set) var resets: [URL] = []
 
     func apply(applicationURL: URL, iconURL: URL) async throws {
         requests.append(Request(applicationURL: applicationURL, iconURL: iconURL))
     }
 
-    func reset(applicationURL _: URL) async throws {}
+    func reset(applicationURL: URL) async throws {
+        resets.append(applicationURL)
+    }
 }

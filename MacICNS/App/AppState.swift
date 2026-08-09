@@ -7,12 +7,15 @@ final class AppState: ObservableObject {
     @Published private(set) var persistenceError: String?
     @Published private(set) var helperStatus: HelperInstallationService.Status
     @Published private(set) var helperError: String?
+    @Published private(set) var operationError: String?
+    @Published private(set) var busyMappingIDs: Set<UUID> = []
 
     private let repository: any MappingRepository
     private let repairCoordinator: RepairCoordinator
     private let helperInstallationService: HelperInstallationService
     private let diagnosticLogger: DiagnosticLogger
     private var hasLaunched = false
+    private var mappingRevision = 0
     private lazy var monitor = MappingFileMonitor(repairCoordinator: repairCoordinator) { [weak self] mapping in
         guard let self else {
             return
@@ -46,10 +49,12 @@ final class AppState: ObservableObject {
     func loadMappings() {
         do {
             mappings = try repository.load()
+            mappingRevision += 1
+            let revision = mappingRevision
             persistenceError = nil
             recordDiagnostic("Loaded \(mappings.count) icon mappings.")
             Task { [weak self] in
-                await self?.startMonitoringAndRepair()
+                await self?.startMonitoringAndRepair(revision: revision)
             }
         } catch {
             persistenceError = "Could not load saved mappings."
@@ -64,12 +69,14 @@ final class AppState: ObservableObject {
             iconURL: iconURL
         )
         mappings.append(mapping)
+        mappingRevision += 1
         saveMappings()
         await monitor.start(mappings: mappings)
         await apply(mapping, reason: .mappingEdited)
     }
 
     func apply(_ mapping: IconMapping, reason: RepairReason = .manual) async {
+        mappingRevision += 1
         let repairedMapping = await repairCoordinator.repair(mapping, reason: reason)
         replace(repairedMapping)
         saveMappings()
@@ -77,6 +84,7 @@ final class AppState: ObservableObject {
     }
 
     func refreshAll() async {
+        mappingRevision += 1
         recordDiagnostic("Manual icon refresh requested.")
         mappings = await repairCoordinator.repairAll(mappings, reason: .manual)
         saveMappings()
@@ -84,14 +92,68 @@ final class AppState: ObservableObject {
     }
 
     func removeMappings(at offsets: IndexSet) {
-        mappings.remove(atOffsets: offsets)
-        saveMappings()
-        Task { [weak self] in
-            guard let self else {
-                return
-            }
-            await self.monitor.start(mappings: self.mappings)
+        let targets = offsets.compactMap { index in
+            mappings.indices.contains(index) ? mappings[index] : nil
         }
+        Task { [weak self] in
+            for mapping in targets {
+                await self?.delete(mapping)
+            }
+        }
+    }
+
+    func setEnabled(_ isEnabled: Bool, for mapping: IconMapping) async {
+        guard !busyMappingIDs.contains(mapping.id) else {
+            return
+        }
+        busyMappingIDs.insert(mapping.id)
+        defer { busyMappingIDs.remove(mapping.id) }
+        mappingRevision += 1
+        operationError = nil
+
+        let updated = await repairCoordinator.setEnabled(isEnabled, for: mapping)
+        replace(updated)
+        if updated.isEnabled != isEnabled {
+            operationError = updated.status == .needsPermission
+                ? "The privileged helper is required to change this icon."
+                : "The icon could not be changed. Please try again."
+            recordDiagnostic("Could not set mapping \(mapping.id) enabled state to \(isEnabled).")
+        } else {
+            recordDiagnostic("Set mapping \(mapping.id) enabled state to \(isEnabled).")
+        }
+        saveMappings()
+        await monitor.start(mappings: mappings)
+    }
+
+    func delete(_ mapping: IconMapping) async {
+        guard !busyMappingIDs.contains(mapping.id),
+              mappings.contains(where: { $0.id == mapping.id })
+        else {
+            return
+        }
+        busyMappingIDs.insert(mapping.id)
+        defer { busyMappingIDs.remove(mapping.id) }
+        mappingRevision += 1
+        operationError = nil
+
+        do {
+            try await repairCoordinator.resetForRemoval(mapping)
+            mappings.removeAll(where: { $0.id == mapping.id })
+            saveMappings()
+            await monitor.start(mappings: mappings)
+            recordDiagnostic("Restored the original icon and deleted mapping \(mapping.id).")
+        } catch {
+            operationError = "The original icon could not be restored, so the mapping was not deleted."
+            recordDiagnostic("Could not delete mapping \(mapping.id): \(error.localizedDescription)")
+        }
+    }
+
+    func isBusy(_ mapping: IconMapping) -> Bool {
+        busyMappingIDs.contains(mapping.id)
+    }
+
+    func dismissOperationError() {
+        operationError = nil
     }
 
     func dismissPersistenceError() {
@@ -136,9 +198,17 @@ final class AppState: ObservableObject {
         mappings[index] = mapping
     }
 
-    private func startMonitoringAndRepair() async {
-        await monitor.start(mappings: mappings)
-        mappings = await repairCoordinator.repairAll(reason: .launch)
+    private func startMonitoringAndRepair(revision: Int) async {
+        guard mappingRevision == revision else {
+            return
+        }
+        let snapshot = mappings
+        await monitor.start(mappings: snapshot)
+        let repairedMappings = await repairCoordinator.repairAll(snapshot, reason: .launch)
+        guard mappingRevision == revision else {
+            return
+        }
+        mappings = repairedMappings
         saveMappings()
         await monitor.start(mappings: mappings)
     }

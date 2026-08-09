@@ -34,6 +34,62 @@ actor RepairCoordinator {
         return repairedMapping
     }
 
+    func setEnabled(_ isEnabled: Bool, for mapping: IconMapping) async -> IconMapping {
+        if let activeRepair = activeRepairs[mapping.id] {
+            _ = await activeRepair.value
+            activeRepairs[mapping.id] = nil
+        }
+
+        if isEnabled {
+            guard !mapping.isEnabled else {
+                return mapping
+            }
+            var candidate = mapping
+            candidate.isEnabled = true
+            candidate.appFingerprint = nil
+            candidate.iconFingerprint = nil
+            let repaired = await repair(candidate, reason: .mappingEdited)
+            guard repaired.status == .upToDate else {
+                var unchanged = mapping
+                unchanged.status = repaired.status
+                return unchanged
+            }
+            return repaired
+        }
+
+        guard mapping.isEnabled else {
+            return mapping
+        }
+        var updated = mapping
+        guard let applicationURL = resolveApplicationURL(for: &updated) else {
+            updated.status = .missingApp
+            return updated
+        }
+        do {
+            try await applier.reset(applicationURL: applicationURL)
+            updated.isEnabled = false
+            updated.appFingerprint = nil
+            updated.iconFingerprint = nil
+            updated.lastSuccessAt = nil
+            updated.status = .upToDate
+        } catch {
+            updated.status = isPermissionFailure(error) ? .needsPermission : .failed
+        }
+        return updated
+    }
+
+    func resetForRemoval(_ mapping: IconMapping) async throws {
+        if let activeRepair = activeRepairs[mapping.id] {
+            _ = await activeRepair.value
+            activeRepairs[mapping.id] = nil
+        }
+        var resolvedMapping = mapping
+        guard let applicationURL = resolveApplicationURL(for: &resolvedMapping) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        try await applier.reset(applicationURL: applicationURL)
+    }
+
     func setMappings(_ mappings: [IconMapping]) {
         mappingsByID = Dictionary(uniqueKeysWithValues: mappings.map { ($0.id, $0) })
         mappingOrder = mappings.map(\.id)
@@ -64,6 +120,10 @@ actor RepairCoordinator {
 
     private func performRepair(_ mapping: IconMapping, reason _: RepairReason) async -> IconMapping {
         var repairedMapping = mapping
+
+        guard repairedMapping.isEnabled else {
+            return repairedMapping
+        }
 
         guard let applicationURL = resolveApplicationURL(for: &repairedMapping) else {
             repairedMapping.status = .missingApp
