@@ -76,6 +76,11 @@ final class AppState: ObservableObject {
     }
 
     func apply(_ mapping: IconMapping, reason: RepairReason = .manual) async {
+        guard !busyMappingIDs.contains(mapping.id) else {
+            return
+        }
+        busyMappingIDs.insert(mapping.id)
+        defer { busyMappingIDs.remove(mapping.id) }
         mappingRevision += 1
         let repairedMapping = await repairCoordinator.repair(mapping, reason: reason)
         replace(repairedMapping)
@@ -84,9 +89,22 @@ final class AppState: ObservableObject {
     }
 
     func refreshAll() async {
+        guard busyMappingIDs.isEmpty else {
+            return
+        }
+        let snapshot = mappings
+        let refreshedIDs = Set(snapshot.map(\.id))
+        busyMappingIDs.formUnion(refreshedIDs)
+        defer { busyMappingIDs.subtract(refreshedIDs) }
         mappingRevision += 1
+        let revision = mappingRevision
         recordDiagnostic("Manual icon refresh requested.")
-        mappings = await repairCoordinator.repairAll(mappings, reason: .manual)
+        let repairedMappings = await repairCoordinator.repairAll(snapshot, reason: .manual)
+        guard mappingRevision == revision else {
+            recordDiagnostic("Discarded a stale manual refresh result after mappings changed.")
+            return
+        }
+        mappings = repairedMappings
         saveMappings()
         await monitor.start(mappings: mappings)
     }

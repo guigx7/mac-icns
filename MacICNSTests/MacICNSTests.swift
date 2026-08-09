@@ -114,6 +114,27 @@ final class MacICNSTests: XCTestCase {
         XCTAssertEqual(appState.mappings.first?.isEnabled, true)
         XCTAssertNotNil(appState.operationError)
     }
+
+    @MainActor
+    func testManualApplyPublishesBusyStateUntilOperationCompletes() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        let mapping = fixture.mapping
+        let applier = BlockingLifecycleApplier()
+        let appState = AppState(
+            repository: MemoryMappingRepository([mapping]),
+            repairCoordinator: RepairCoordinator(applier: applier)
+        )
+        appState.loadMappings()
+
+        let applyTask = Task { await appState.apply(mapping) }
+        await applier.waitUntilApplyStarts()
+
+        XCTAssertTrue(appState.isBusy(mapping))
+        await applier.finishApply()
+        await applyTask.value
+        XCTAssertFalse(appState.isBusy(mapping))
+    }
 }
 
 private struct EmptyMappingRepository: MappingRepository {
@@ -151,6 +172,37 @@ private actor LifecycleApplier: IconApplying {
         if failReset {
             throw CocoaError(.fileWriteNoPermission)
         }
+    }
+}
+
+private actor BlockingLifecycleApplier: IconApplying {
+    private var didStart = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var applyContinuation: CheckedContinuation<Void, Never>?
+
+    func apply(applicationURL _: URL, iconURL _: URL) async throws {
+        didStart = true
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+        await withCheckedContinuation { continuation in
+            applyContinuation = continuation
+        }
+    }
+
+    func reset(applicationURL _: URL) async throws {}
+
+    func waitUntilApplyStarts() async {
+        guard !didStart else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func finishApply() {
+        applyContinuation?.resume()
+        applyContinuation = nil
     }
 }
 
