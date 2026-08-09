@@ -5,9 +5,12 @@ import Foundation
 final class AppState: ObservableObject {
     @Published private(set) var mappings: [IconMapping] = []
     @Published private(set) var persistenceError: String?
+    @Published private(set) var helperStatus: HelperInstallationService.Status
 
     private let repository: any MappingRepository
     private let repairCoordinator: RepairCoordinator
+    private let helperInstallationService: HelperInstallationService
+    private let diagnosticLogger: DiagnosticLogger
     private lazy var monitor = MappingFileMonitor(repairCoordinator: repairCoordinator) { [weak self] mapping in
         guard let self else {
             return
@@ -18,21 +21,33 @@ final class AppState: ObservableObject {
 
     init(
         repository: any MappingRepository = JSONMappingRepository(),
-        repairCoordinator: RepairCoordinator = RepairCoordinator(applier: DirectIconApplier())
+        repairCoordinator: RepairCoordinator = RepairCoordinator(applier: DirectIconApplier()),
+        helperInstallationService: HelperInstallationService = HelperInstallationService(),
+        diagnosticLogger: DiagnosticLogger = DiagnosticLogger()
     ) {
         self.repository = repository
         self.repairCoordinator = repairCoordinator
+        self.helperInstallationService = helperInstallationService
+        self.diagnosticLogger = diagnosticLogger
+        helperStatus = helperInstallationService.status
+    }
+
+    func launch() {
+        refreshHelperStatus()
+        loadMappings()
     }
 
     func loadMappings() {
         do {
             mappings = try repository.load()
             persistenceError = nil
+            recordDiagnostic("Loaded \(mappings.count) icon mappings.")
             Task { [weak self] in
                 await self?.startMonitoringAndRepair()
             }
         } catch {
             persistenceError = "Could not load saved mappings."
+            recordDiagnostic("Could not load saved mappings: \(error.localizedDescription)")
         }
     }
 
@@ -55,6 +70,13 @@ final class AppState: ObservableObject {
         await monitor.start(mappings: mappings)
     }
 
+    func refreshAll() async {
+        recordDiagnostic("Manual icon refresh requested.")
+        mappings = await repairCoordinator.repairAll(mappings, reason: .manual)
+        saveMappings()
+        await monitor.start(mappings: mappings)
+    }
+
     func removeMappings(at offsets: IndexSet) {
         mappings.remove(atOffsets: offsets)
         saveMappings()
@@ -68,6 +90,17 @@ final class AppState: ObservableObject {
 
     func dismissPersistenceError() {
         persistenceError = nil
+    }
+
+    func refreshHelperStatus() {
+        helperStatus = helperInstallationService.status
+        if helperStatus == .requiresApproval {
+            recordDiagnostic("Privileged helper requires approval.")
+        }
+    }
+
+    func openHelperApprovalSettings() {
+        helperInstallationService.openLoginItemsAndExtensions()
     }
 
     private func replace(_ mapping: IconMapping) {
@@ -90,6 +123,11 @@ final class AppState: ObservableObject {
             persistenceError = nil
         } catch {
             persistenceError = "Could not save mappings."
+            recordDiagnostic("Could not save mappings: \(error.localizedDescription)")
         }
+    }
+
+    private func recordDiagnostic(_ message: String) {
+        try? diagnosticLogger.record(message)
     }
 }
