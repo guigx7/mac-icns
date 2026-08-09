@@ -164,6 +164,39 @@ final class RepairSchedulerTests: XCTestCase {
         XCTAssertTrue(completedAfterRepair)
     }
 
+    func testCancelAllNotifiesCompletionForAnAwakenedRepair() async {
+        let clock = TestClock()
+        let repairGate = RepairGate()
+        let completions = CompletionIDRecorder()
+        let mappingID = UUID()
+        let scheduler = RepairScheduler(
+            delay: .seconds(3),
+            clock: clock,
+            repair: { id, _ in
+                await repairGate.repair(id)
+            },
+            repairCompletion: { id in
+                await completions.record(id)
+            }
+        )
+
+        await scheduler.enqueue(mappingID: mappingID, reason: .fileSystemChange)
+        let sleepStarted = await clock.waitUntilSleeping(count: 1)
+        XCTAssertTrue(sleepStarted)
+        await clock.advance(by: .seconds(3))
+        let repairStarted = await repairGate.waitUntilRepairStarts()
+        XCTAssertTrue(repairStarted)
+
+        let cancellation = Task {
+            await scheduler.cancelAll()
+        }
+        await repairGate.releaseRepair()
+        await cancellation.value
+
+        let completedIDs = await completions.ids
+        XCTAssertEqual(completedIDs, [mappingID])
+    }
+
     @MainActor
     func testMonitorIgnoresEventsFromTheReplacedStream() async {
         let clock = TestClock()
@@ -325,6 +358,80 @@ final class RepairSchedulerTests: XCTestCase {
     }
 
     @MainActor
+    func testConcurrentMovedMappingsReconcileToBothNewParentDirectories() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let oldFirstURL = temporaryDirectory
+            .appending(path: "OldFirst/First.app", directoryHint: .isDirectory)
+        let oldSecondURL = temporaryDirectory
+            .appending(path: "OldSecond/Second.app", directoryHint: .isDirectory)
+        let movedFirstURL = temporaryDirectory
+            .appending(path: "NewFirst/First.app", directoryHint: .isDirectory)
+        let movedSecondURL = temporaryDirectory
+            .appending(path: "NewSecond/Second.app", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: movedFirstURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: movedSecondURL, withIntermediateDirectories: true)
+
+        let firstMapping = IconMapping(
+            applicationURL: oldFirstURL,
+            bundleIdentifier: "com.example.First",
+            iconURL: temporaryDirectory.appending(path: "First.icns")
+        )
+        let secondMapping = IconMapping(
+            applicationURL: oldSecondURL,
+            bundleIdentifier: "com.example.Second",
+            iconURL: temporaryDirectory.appending(path: "Second.icns")
+        )
+        let clock = TestClock()
+        let streamFactory = RecordingStreamFactory()
+        let applier = BlockingApplicationApplier(blockedApplicationURL: movedSecondURL)
+        let coordinator = RepairCoordinator(
+            fingerprinting: FixedFingerprint(),
+            locator: MappingLocator(results: [
+                "com.example.First": movedFirstURL,
+                "com.example.Second": movedSecondURL,
+            ]),
+            applier: applier
+        )
+        let monitor = MappingFileMonitor(
+            repairCoordinator: coordinator,
+            streamFactory: streamFactory.make,
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
+            }
+        )
+
+        await monitor.start(mappings: [firstMapping, secondMapping])
+        let initialStream = try XCTUnwrap(streamFactory.latestStream)
+        initialStream.emit(paths: [oldFirstURL.path, oldSecondURL.path])
+        let sleepsStarted = await clock.waitUntilSleeping(count: 2)
+        XCTAssertTrue(sleepsStarted)
+        await clock.advance(by: .seconds(3))
+
+        let secondRepairBlocked = await applier.waitUntilBlocked()
+        XCTAssertTrue(secondRepairBlocked)
+        let initialStreamStopped = await streamFactory.waitUntilStopped(initialStream)
+        XCTAssertTrue(initialStreamStopped)
+
+        await applier.releaseBlockedApplication()
+        let expectedDirectories: Set<String> = [
+            movedFirstURL.deletingLastPathComponent().standardizedFileURL.path,
+            movedSecondURL.deletingLastPathComponent().standardizedFileURL.path,
+        ]
+        let reconciled = await streamFactory.waitUntilDirectorySet(expectedDirectories)
+        XCTAssertTrue(reconciled)
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(streamFactory.latestDirectories, expectedDirectories)
+    }
+
+    @MainActor
     func testOverlappingStartsLeaveOnlyTheNewestMappingStreamActive() async {
         let clock = BlockingClock()
         let streamFactory = RecordingStreamFactory()
@@ -402,6 +509,14 @@ private actor CompletionRecorder {
     }
 }
 
+private actor CompletionIDRecorder {
+    private(set) var ids: [UUID] = []
+
+    func record(_ id: UUID) {
+        ids.append(id)
+    }
+}
+
 private actor RepairGate {
     private var repairStarted = false
     private var continuation: CheckedContinuation<Void, Never>?
@@ -440,6 +555,49 @@ private struct FixedLocator: ApplicationLocating {
 
     func resolve(_: String) -> URL? {
         result
+    }
+}
+
+private struct MappingLocator: ApplicationLocating {
+    let results: [String: URL]
+
+    func resolve(_ bundleIdentifier: String) -> URL? {
+        results[bundleIdentifier]
+    }
+}
+
+private actor BlockingApplicationApplier: IconApplying {
+    private let blockedApplicationURL: URL
+    private var blocked = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(blockedApplicationURL: URL) {
+        self.blockedApplicationURL = blockedApplicationURL
+    }
+
+    func apply(applicationURL: URL, iconURL _: URL) async throws {
+        guard applicationURL == blockedApplicationURL else {
+            return
+        }
+        blocked = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilBlocked() async -> Bool {
+        for _ in 0 ..< 100 {
+            if blocked {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return blocked
+    }
+
+    func releaseBlockedApplication() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 
@@ -576,6 +734,10 @@ private final class RecordingStreamFactory {
         streams.last
     }
 
+    var latestDirectories: Set<String>? {
+        directorySets.last
+    }
+
     func make(
         directories: Set<String>,
         handler: @escaping @Sendable ([String]) -> Void
@@ -587,13 +749,27 @@ private final class RecordingStreamFactory {
     }
 
     func waitUntilDirectorySet(_ directory: String) async -> Bool {
+        await waitUntilDirectorySet([directory])
+    }
+
+    func waitUntilDirectorySet(_ directories: Set<String>) async -> Bool {
         for _ in 0 ..< 100 {
-            if directorySets.contains([directory]) {
+            if directorySets.contains(directories) {
                 return true
             }
             try? await Task.sleep(for: .milliseconds(1))
         }
-        return directorySets.contains([directory])
+        return directorySets.contains(directories)
+    }
+
+    func waitUntilStopped(_ stream: FakeMappingEventStream) async -> Bool {
+        for _ in 0 ..< 100 {
+            if stream.stopCount > 0 {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return stream.stopCount > 0
     }
 }
 

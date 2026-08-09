@@ -53,6 +53,11 @@ final class MappingFileMonitor {
     }
 
     func start(mappings: [IconMapping]) async {
+        mappingsByID = Dictionary(uniqueKeysWithValues: mappings.map { ($0.id, $0) })
+        await reconcileMonitoring()
+    }
+
+    private func reconcileMonitoring() async {
         streamGeneration += 1
         let generation = streamGeneration
         stopStream()
@@ -62,7 +67,7 @@ final class MappingFileMonitor {
             return
         }
 
-        mappingsByID = Dictionary(uniqueKeysWithValues: mappings.map { ($0.id, $0) })
+        let mappings = Array(mappingsByID.values)
         await repairCoordinator.setMappings(mappings)
 
         guard streamGeneration == generation else {
@@ -152,7 +157,7 @@ final class MappingFileMonitor {
         guard mappingsAwaitingReconfiguration.remove(mappingID) != nil else {
             return
         }
-        await start(mappings: Array(mappingsByID.values))
+        await reconcileMonitoring()
     }
 
     private static func makeFSEventStream(

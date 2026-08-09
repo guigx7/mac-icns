@@ -58,17 +58,17 @@ actor RepairScheduler {
             do {
                 try await clock.sleep(for: delay)
             } catch {
-                await self?.finish(mappingID: mappingID, token: token)
+                await self?.finish(mappingID: mappingID, token: token, notifyCompletion: false)
                 return
             }
 
             guard !Task.isCancelled else {
-                await self?.finish(mappingID: mappingID, token: token)
+                await self?.finish(mappingID: mappingID, token: token, notifyCompletion: false)
                 return
             }
 
             await repair(mappingID, reason)
-            await self?.finish(mappingID: mappingID, token: token)
+            await self?.finish(mappingID: mappingID, token: token, notifyCompletion: true)
         }
         pendingRepairs[mappingID] = PendingRepair(token: token, task: task)
     }
@@ -97,7 +97,6 @@ actor RepairScheduler {
 
     private func cancelAllPendingRepairs() async {
         let repairs = Array(pendingRepairs.values)
-        pendingRepairs.removeAll()
 
         for pendingRepair in repairs {
             pendingRepair.task.cancel()
@@ -107,11 +106,13 @@ actor RepairScheduler {
         }
     }
 
-    private func finish(mappingID: UUID, token: UUID) async {
+    private func finish(mappingID: UUID, token: UUID, notifyCompletion: Bool) async {
         guard pendingRepairs[mappingID]?.token == token else {
             return
         }
         pendingRepairs[mappingID] = nil
-        await repairCompletion(mappingID)
+        if notifyCompletion {
+            await repairCompletion(mappingID)
+        }
     }
 }
