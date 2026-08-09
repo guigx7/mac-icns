@@ -34,6 +34,8 @@ final class MappingFileMonitor {
         }
     )
     private var mappingsByID: [UUID: IconMapping] = [:]
+    private var mappingRevisions: [UUID: Int] = [:]
+    private var nextMappingRevision = 0
     private var stream: (any MappingEventStream)?
     private var streamGeneration = 0
     private var mappingsAwaitingReconfiguration: Set<UUID> = []
@@ -53,7 +55,19 @@ final class MappingFileMonitor {
     }
 
     func start(mappings: [IconMapping]) async {
-        mappingsByID = Dictionary(uniqueKeysWithValues: mappings.map { ($0.id, $0) })
+        let newMappingsByID = Dictionary(uniqueKeysWithValues: mappings.map { ($0.id, $0) })
+        var newMappingRevisions: [UUID: Int] = [:]
+        for (mappingID, mapping) in newMappingsByID {
+            if mappingsByID[mappingID] == mapping,
+               let revision = mappingRevisions[mappingID] {
+                newMappingRevisions[mappingID] = revision
+            } else {
+                nextMappingRevision += 1
+                newMappingRevisions[mappingID] = nextMappingRevision
+            }
+        }
+        mappingsByID = newMappingsByID
+        mappingRevisions = newMappingRevisions
         await reconcileMonitoring()
     }
 
@@ -140,12 +154,17 @@ final class MappingFileMonitor {
     }
 
     private func repair(mappingID: UUID, reason: RepairReason) async {
-        guard let mapping = mappingsByID[mappingID] else {
+        guard let mapping = mappingsByID[mappingID],
+              let mappingRevision = mappingRevisions[mappingID]
+        else {
             return
         }
 
         let repairedMapping = await repairCoordinator.repair(mapping, reason: reason)
-        mappingsByID[repairedMapping.id] = repairedMapping
+        guard mappingRevisions[mappingID] == mappingRevision else {
+            return
+        }
+        mappingsByID[mappingID] = repairedMapping
         if repairedMapping.applicationURL.deletingLastPathComponent().standardizedFileURL
             != mapping.applicationURL.deletingLastPathComponent().standardizedFileURL {
             mappingsAwaitingReconfiguration.insert(repairedMapping.id)

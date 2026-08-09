@@ -432,6 +432,135 @@ final class RepairSchedulerTests: XCTestCase {
     }
 
     @MainActor
+    func testMonitorDropsRepairResultWhenMappingIsRemovedWhileRepairIsInFlight() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let applicationURL = temporaryDirectory
+            .appending(path: "Old/Example.app", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: applicationURL, withIntermediateDirectories: true)
+
+        let mapping = IconMapping(
+            applicationURL: applicationURL,
+            bundleIdentifier: "com.example.Example",
+            iconURL: temporaryDirectory.appending(path: "Example.icns")
+        )
+        let clock = TestClock()
+        let streamFactory = RecordingStreamFactory()
+        let recorder = MappingRecorder()
+        let applier = BlockingApplicationApplier(blockedApplicationURL: applicationURL)
+        let monitor = MappingFileMonitor(
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: FixedFingerprint(),
+                locator: FixedLocator(result: nil),
+                applier: applier
+            ),
+            onRepair: recorder.record,
+            streamFactory: streamFactory.make,
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
+            }
+        )
+
+        await monitor.start(mappings: [mapping])
+        let initialStream = try XCTUnwrap(streamFactory.latestStream)
+        initialStream.emit(paths: [applicationURL.path])
+        let sleepStarted = await clock.waitUntilSleeping(count: 1)
+        XCTAssertTrue(sleepStarted)
+        await clock.advance(by: .seconds(3))
+        let repairBlocked = await applier.waitUntilBlocked()
+        XCTAssertTrue(repairBlocked)
+
+        let removal = Task { @MainActor in
+            await monitor.start(mappings: [])
+        }
+        let initialStreamStopped = await streamFactory.waitUntilStopped(initialStream)
+        XCTAssertTrue(initialStreamStopped)
+        await applier.releaseBlockedApplication()
+        await removal.value
+
+        XCTAssertTrue(recorder.mappings.isEmpty)
+        XCTAssertEqual(streamFactory.directorySets, [[applicationURL.deletingLastPathComponent().path]])
+    }
+
+    @MainActor
+    func testMonitorDropsRepairResultWhenSameIDMappingIsReplacedWhileRepairIsInFlight() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let oldApplicationURL = temporaryDirectory
+            .appending(path: "Old/Example.app", directoryHint: .isDirectory)
+        let replacementApplicationURL = temporaryDirectory
+            .appending(path: "Replacement/Example.app", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: oldApplicationURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: replacementApplicationURL, withIntermediateDirectories: true)
+
+        let oldMapping = IconMapping(
+            applicationURL: oldApplicationURL,
+            bundleIdentifier: "com.example.Example",
+            iconURL: temporaryDirectory.appending(path: "Old.icns")
+        )
+        var replacementMapping = oldMapping
+        replacementMapping.applicationURL = replacementApplicationURL.standardizedFileURL
+        replacementMapping.iconURL = temporaryDirectory.appending(path: "Replacement.icns").standardizedFileURL
+
+        let clock = TestClock()
+        let streamFactory = RecordingStreamFactory()
+        let recorder = MappingRecorder()
+        let applier = BlockingApplicationApplier(blockedApplicationURL: oldApplicationURL)
+        let monitor = MappingFileMonitor(
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: FixedFingerprint(),
+                locator: FixedLocator(result: nil),
+                applier: applier
+            ),
+            onRepair: recorder.record,
+            streamFactory: streamFactory.make,
+            schedulerFactory: { repair, completion in
+                RepairScheduler(
+                    delay: .seconds(3),
+                    clock: clock,
+                    repair: repair,
+                    repairCompletion: completion
+                )
+            }
+        )
+
+        await monitor.start(mappings: [oldMapping])
+        let initialStream = try XCTUnwrap(streamFactory.latestStream)
+        initialStream.emit(paths: [oldApplicationURL.path])
+        let sleepStarted = await clock.waitUntilSleeping(count: 1)
+        XCTAssertTrue(sleepStarted)
+        await clock.advance(by: .seconds(3))
+        let repairBlocked = await applier.waitUntilBlocked()
+        XCTAssertTrue(repairBlocked)
+
+        let replacement = Task { @MainActor in
+            await monitor.start(mappings: [replacementMapping])
+        }
+        let initialStreamStopped = await streamFactory.waitUntilStopped(initialStream)
+        XCTAssertTrue(initialStreamStopped)
+        await applier.releaseBlockedApplication()
+        await replacement.value
+
+        XCTAssertTrue(recorder.mappings.isEmpty)
+        XCTAssertEqual(
+            streamFactory.directorySets,
+            [
+                [oldApplicationURL.deletingLastPathComponent().path],
+                [replacementApplicationURL.deletingLastPathComponent().path],
+            ]
+        )
+    }
+
+    @MainActor
     func testOverlappingStartsLeaveOnlyTheNewestMappingStreamActive() async {
         let clock = BlockingClock()
         let streamFactory = RecordingStreamFactory()
@@ -498,6 +627,15 @@ private actor RepairRecorder {
         while ids.count < count {
             await Task.yield()
         }
+    }
+}
+
+@MainActor
+private final class MappingRecorder {
+    private(set) var mappings: [IconMapping] = []
+
+    func record(_ mapping: IconMapping) {
+        mappings.append(mapping)
     }
 }
 
