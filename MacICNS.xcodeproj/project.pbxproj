@@ -48,6 +48,8 @@
 		A90000000000000000000001 /* DiagnosticLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000011 /* DiagnosticLoggerTests.swift */; };
 		A90000000000000000000002 /* DiagnosticLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000012 /* DiagnosticLogger.swift */; };
 		A90000000000000000000003 /* LoginItemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000013 /* LoginItemService.swift */; };
+		AA0000000000000000000001 /* ApplicationIconProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ApplicationIconProviderTests.swift */; };
+		AA0000000000000000000002 /* ApplicationIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ApplicationIconProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -131,6 +133,8 @@
 		A90000000000000000000011 /* DiagnosticLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLoggerTests.swift; sourceTree = "<group>"; };
 		A90000000000000000000012 /* DiagnosticLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLogger.swift; sourceTree = "<group>"; };
 		A90000000000000000000013 /* LoginItemService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemService.swift; sourceTree = "<group>"; };
+		AA0000000000000000000011 /* ApplicationIconProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationIconProviderTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000012 /* ApplicationIconProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationIconProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -204,6 +208,7 @@
 				A50000000000000000000011 /* IconApplyRequestTests.swift */,
 				A80000000000000000000011 /* RepairSchedulerTests.swift */,
 				A90000000000000000000011 /* DiagnosticLoggerTests.swift */,
+				AA0000000000000000000011 /* ApplicationIconProviderTests.swift */,
 			);
 			path = MacICNSTests;
 			sourceTree = "<group>";
@@ -266,6 +271,7 @@
 		A30000000000000000000021 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000012 /* ApplicationIconProvider.swift */,
 				A30000000000000000000013 /* BundleFingerprinting.swift */,
 				A30000000000000000000014 /* ApplicationLocator.swift */,
 				A30000000000000000000015 /* RepairCoordinator.swift */,
@@ -400,6 +406,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000000002 /* ApplicationIconProvider.swift in Sources */,
 				A10000000000000000000001 /* MacICNSApp.swift in Sources */,
 				A40000000000000000000003 /* AppState.swift in Sources */,
 				A20000000000000000000001 /* IconMapping.swift in Sources */,
@@ -446,6 +453,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000003 /* MacICNSTests.swift in Sources */,
+				AA0000000000000000000001 /* ApplicationIconProviderTests.swift in Sources */,
 				A20000000000000000000005 /* JSONMappingRepositoryTests.swift in Sources */,
 				A30000000000000000000001 /* RepairCoordinatorTests.swift in Sources */,
 				A40000000000000000000001 /* DirectIconApplierTests.swift in Sources */,
