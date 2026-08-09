@@ -18,6 +18,99 @@ final class MacICNSTests: XCTestCase {
         XCTAssertEqual(MappingRowPresentation.toggleLabel(isEnabled: false), "Disabled")
     }
 
+    @MainActor
+    func testInstalledHelperPresentationOffersUpdate() {
+        XCTAssertEqual(
+            HelperSettingsPresentation.primaryActionTitle(for: .installed),
+            "Update Helper"
+        )
+    }
+
+    @MainActor
+    func testHelperUpdateUnregistersBeforeRegistering() async throws {
+        var events: [String] = []
+        var status = HelperInstallationService.Status.installed
+        let service = HelperInstallationService(
+            statusProvider: { status },
+            register: {
+                events.append("register")
+                status = .installed
+            },
+            unregister: {
+                await Task.yield()
+                events.append("unregister")
+                status = .notInstalled
+            },
+            openSettings: {}
+        )
+
+        try await service.update()
+
+        XCTAssertEqual(events, ["unregister", "register"])
+        XCTAssertEqual(service.status, .installed)
+    }
+
+    @MainActor
+    func testHelperUpdateFailureRemainsVisible() async {
+        let service = HelperInstallationService(
+            statusProvider: { .installed },
+            register: {},
+            unregister: {
+                await Task.yield()
+                throw HelperUpdateTestError.unregisterFailed
+            },
+            openSettings: {}
+        )
+        let appState = AppState(
+            repository: EmptyMappingRepository(),
+            helperInstallationService: service
+        )
+
+        await appState.updateHelper()
+
+        XCTAssertEqual(appState.helperStatus, .installed)
+        XCTAssertFalse(appState.helperIsUpdating)
+        XCTAssertTrue(appState.helperError?.contains("Could not update the helper") == true)
+    }
+
+    @MainActor
+    func testSuccessfulHelperUpdateReappliesEnabledMappings() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let applier = UpdateRecordingApplier()
+        let coordinator = RepairCoordinator(
+            fingerprinting: ConstantFingerprinting(value: "same"),
+            applier: applier
+        )
+        var status = HelperInstallationService.Status.installed
+        let service = HelperInstallationService(
+            statusProvider: { status },
+            register: { status = .installed },
+            unregister: {
+                await Task.yield()
+                status = .notInstalled
+            },
+            openSettings: {}
+        )
+        let appState = AppState(
+            repository: MemoryMappingRepository([mapping]),
+            repairCoordinator: coordinator,
+            helperInstallationService: service
+        )
+        appState.loadMappings()
+        try await Task.sleep(for: .milliseconds(50))
+
+        await appState.updateHelper()
+
+        let applyCount = await applier.applyCount
+        XCTAssertEqual(applyCount, 1)
+        XCTAssertEqual(appState.helperStatus, .installed)
+        XCTAssertNil(appState.helperError)
+    }
+
     func testFSEventPathDecoderReadsCStringVector() {
         let first = strdup("/Applications/Spotify.app")!
         let second = strdup("/Applications/Spotify.app/Contents/Info.plist")!
@@ -209,6 +302,26 @@ private actor BlockingLifecycleApplier: IconApplying {
         applyContinuation?.resume()
         applyContinuation = nil
     }
+}
+
+private struct ConstantFingerprinting: Fingerprinting {
+    let value: String
+
+    func fingerprint(of url: URL) throws -> String { value }
+}
+
+private actor UpdateRecordingApplier: IconApplying {
+    private(set) var applyCount = 0
+
+    func apply(applicationURL: URL, iconURL: URL) async throws {
+        applyCount += 1
+    }
+
+    func reset(applicationURL: URL) async throws {}
+}
+
+private enum HelperUpdateTestError: Error {
+    case unregisterFailed
 }
 
 private struct MappingFixture {

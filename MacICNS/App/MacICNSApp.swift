@@ -69,11 +69,23 @@ private struct SettingsView: View {
 
             Section("Privileged Helper") {
                 Text(helperStatusMessage)
-                if appState.helperStatus == .notInstalled {
-                    Button("Install Helper") {
-                        appState.installHelper()
+                if let actionTitle = HelperSettingsPresentation.primaryActionTitle(
+                    for: appState.helperStatus
+                ) {
+                    Button(actionTitle) {
+                        if appState.helperStatus == .installed {
+                            Task { await appState.updateHelper() }
+                        } else {
+                            appState.installHelper()
+                        }
                     }
-                } else if appState.helperStatus == .requiresApproval {
+                    .disabled(appState.helperIsUpdating)
+                }
+                if appState.helperIsUpdating {
+                    ProgressView("Updating helper…")
+                        .controlSize(.small)
+                }
+                if appState.helperStatus == .requiresApproval {
                     Button("Open Login Items Settings") {
                         appState.openHelperApprovalSettings()
                     }
@@ -85,6 +97,7 @@ private struct SettingsView: View {
                 Button("Refresh Helper Status") {
                     appState.refreshHelperStatus()
                 }
+                .disabled(appState.helperIsUpdating)
             }
         }
         .padding()
@@ -102,6 +115,21 @@ private struct SettingsView: View {
             "Helper needs approval in Login Items & Extensions."
         case .notInstalled:
             "Helper is not installed."
+        }
+    }
+}
+
+enum HelperSettingsPresentation {
+    static func primaryActionTitle(
+        for status: HelperInstallationService.Status
+    ) -> String? {
+        switch status {
+        case .installed:
+            "Update Helper"
+        case .notInstalled:
+            "Install Helper"
+        case .requiresApproval:
+            nil
         }
     }
 }

@@ -25,6 +25,7 @@ struct MappingListView: View {
                                 originalIcon: iconProvider.originalIcon(for: mapping.applicationURL),
                                 customIcon: iconProvider.customIcon(at: mapping.iconURL),
                                 isBusy: appState.isBusy(mapping),
+                                failureMessage: appState.failureMessage(for: mapping),
                                 apply: { Task { await appState.apply(mapping) } },
                                 setEnabled: { isEnabled in
                                     Task { await appState.setEnabled(isEnabled, for: mapping) }
@@ -90,6 +91,7 @@ private struct MappingRowView: View {
     let originalIcon: NSImage
     let customIcon: NSImage
     let isBusy: Bool
+    let failureMessage: String?
     let apply: () -> Void
     let setEnabled: (Bool) -> Void
     let delete: () -> Void
@@ -118,6 +120,12 @@ private struct MappingRowView: View {
                 Text(statusName)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(statusColor)
+                if let failureMessage, mapping.isEnabled {
+                    Text(failureMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
 
             Spacer()

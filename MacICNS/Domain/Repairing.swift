@@ -6,6 +6,7 @@ enum RepairReason: Sendable {
     case manual
     case fileSystemChange
     case mappingEdited
+    case helperUpdated
 }
 
 protocol Fingerprinting: Sendable {

@@ -7,8 +7,10 @@ final class AppState: ObservableObject {
     @Published private(set) var persistenceError: String?
     @Published private(set) var helperStatus: HelperInstallationService.Status
     @Published private(set) var helperError: String?
+    @Published private(set) var helperIsUpdating = false
     @Published private(set) var operationError: String?
     @Published private(set) var busyMappingIDs: Set<UUID> = []
+    @Published private(set) var mappingFailureMessages: [UUID: String] = [:]
 
     private let repository: any MappingRepository
     private let repairCoordinator: RepairCoordinator
@@ -22,6 +24,7 @@ final class AppState: ObservableObject {
         }
         self.replace(mapping)
         self.saveMappings()
+        Task { await self.synchronizeFailureDetails(for: [mapping]) }
     }
 
     init(
@@ -49,6 +52,7 @@ final class AppState: ObservableObject {
     func loadMappings() {
         do {
             mappings = try repository.load()
+            mappingFailureMessages = [:]
             mappingRevision += 1
             let revision = mappingRevision
             persistenceError = nil
@@ -85,10 +89,15 @@ final class AppState: ObservableObject {
         let repairedMapping = await repairCoordinator.repair(mapping, reason: reason)
         replace(repairedMapping)
         saveMappings()
+        await synchronizeFailureDetails(for: [repairedMapping])
         await monitor.start(mappings: mappings)
     }
 
     func refreshAll() async {
+        await refreshAll(reason: .manual, diagnosticMessage: "Manual icon refresh requested.")
+    }
+
+    private func refreshAll(reason: RepairReason, diagnosticMessage: String) async {
         guard busyMappingIDs.isEmpty else {
             return
         }
@@ -98,14 +107,15 @@ final class AppState: ObservableObject {
         defer { busyMappingIDs.subtract(refreshedIDs) }
         mappingRevision += 1
         let revision = mappingRevision
-        recordDiagnostic("Manual icon refresh requested.")
-        let repairedMappings = await repairCoordinator.repairAll(snapshot, reason: .manual)
+        recordDiagnostic(diagnosticMessage)
+        let repairedMappings = await repairCoordinator.repairAll(snapshot, reason: reason)
         guard mappingRevision == revision else {
             recordDiagnostic("Discarded a stale manual refresh result after mappings changed.")
             return
         }
         mappings = repairedMappings
         saveMappings()
+        await synchronizeFailureDetails(for: repairedMappings)
         await monitor.start(mappings: mappings)
     }
 
@@ -131,10 +141,10 @@ final class AppState: ObservableObject {
 
         let updated = await repairCoordinator.setEnabled(isEnabled, for: mapping)
         replace(updated)
+        await synchronizeFailureDetails(for: [updated])
         if updated.isEnabled != isEnabled {
-            operationError = updated.status == .needsPermission
-                ? "The privileged helper is required to change this icon."
-                : "The icon could not be changed. Please try again."
+            operationError = mappingFailureMessages[updated.id]
+                ?? "The icon could not be changed. Please try again."
             recordDiagnostic("Could not set mapping \(mapping.id) enabled state to \(isEnabled).")
         } else {
             recordDiagnostic("Set mapping \(mapping.id) enabled state to \(isEnabled).")
@@ -157,17 +167,24 @@ final class AppState: ObservableObject {
         do {
             try await repairCoordinator.resetForRemoval(mapping)
             mappings.removeAll(where: { $0.id == mapping.id })
+            mappingFailureMessages[mapping.id] = nil
             saveMappings()
             await monitor.start(mappings: mappings)
             recordDiagnostic("Restored the original icon and deleted mapping \(mapping.id).")
         } catch {
-            operationError = "The original icon could not be restored, so the mapping was not deleted."
-            recordDiagnostic("Could not delete mapping \(mapping.id): \(error.localizedDescription)")
+            await synchronizeFailureDetails(for: [mapping])
+            operationError = mappingFailureMessages[mapping.id]
+                ?? "The original icon could not be restored, so the mapping was not deleted."
+            recordDiagnostic("Could not delete mapping \(mapping.id).")
         }
     }
 
     func isBusy(_ mapping: IconMapping) -> Bool {
         busyMappingIDs.contains(mapping.id)
+    }
+
+    func failureMessage(for mapping: IconMapping) -> String? {
+        mappingFailureMessages[mapping.id]
     }
 
     func dismissOperationError() {
@@ -188,7 +205,10 @@ final class AppState: ObservableObject {
         if previousStatus != .installed, helperStatus == .installed {
             recordDiagnostic("Privileged helper became available; refreshing icons.")
             Task { [weak self] in
-                await self?.refreshAll()
+                await self?.refreshAll(
+                    reason: .helperUpdated,
+                    diagnosticMessage: "Reapplying icons after helper became available."
+                )
             }
         }
     }
@@ -202,6 +222,32 @@ final class AppState: ObservableObject {
         } catch {
             helperError = "Could not install the helper: \(error.localizedDescription)"
             recordDiagnostic("Could not install privileged helper: \(error.localizedDescription)")
+        }
+    }
+
+    func updateHelper() async {
+        guard !helperIsUpdating else { return }
+        helperIsUpdating = true
+        helperError = nil
+        defer { helperIsUpdating = false }
+
+        do {
+            try await helperInstallationService.update()
+            helperStatus = helperInstallationService.status
+            guard helperStatus == .installed else {
+                helperError = "The helper update needs approval in Login Items & Extensions."
+                recordDiagnostic("Privileged helper update requires approval.")
+                return
+            }
+            recordDiagnostic("Privileged helper was updated successfully.")
+            await refreshAll(
+                reason: .helperUpdated,
+                diagnosticMessage: "Reapplying enabled icons after helper update."
+            )
+        } catch {
+            helperStatus = helperInstallationService.status
+            helperError = "Could not update the helper: \(error.localizedDescription)"
+            recordDiagnostic("Could not update privileged helper: \(sanitizedDescription(error))")
         }
     }
 
@@ -228,6 +274,7 @@ final class AppState: ObservableObject {
         }
         mappings = repairedMappings
         saveMappings()
+        await synchronizeFailureDetails(for: repairedMappings)
         await monitor.start(mappings: mappings)
     }
 
@@ -243,5 +290,27 @@ final class AppState: ObservableObject {
 
     private func recordDiagnostic(_ message: String) {
         try? diagnosticLogger.record(message)
+    }
+
+    private func synchronizeFailureDetails(for mappings: [IconMapping]) async {
+        for mapping in mappings {
+            if let details = await repairCoordinator.failureDetails(for: mapping.id) {
+                let previousMessage = mappingFailureMessages[mapping.id]
+                mappingFailureMessages[mapping.id] = details.userMessage
+                if previousMessage != details.userMessage {
+                    recordDiagnostic("Icon mapping \(mapping.id) failed: \(details.diagnosticSummary)")
+                }
+            } else {
+                mappingFailureMessages[mapping.id] = nil
+            }
+        }
+    }
+
+    private func sanitizedDescription(_ error: Error) -> String {
+        let nsError = error as NSError
+        let description = nsError.localizedDescription
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        return "domain=\(String(nsError.domain.prefix(200))) code=\(nsError.code) description=\(String(description.prefix(300)))"
     }
 }

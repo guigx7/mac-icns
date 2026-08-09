@@ -233,6 +233,33 @@ final class RepairCoordinatorTests: XCTestCase {
         XCTAssertEqual(repaired.status, .failed)
     }
 
+    func testRepairCoordinatorExposesSanitizedFailureDetails() async throws {
+        var mapping = makeMapping()
+        mapping.appFingerprint = "old-app"
+        mapping.iconFingerprint = "old-icon"
+        let failure = NSError(
+            domain: "com.guigx.macicns.helper",
+            code: 42,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Could not write \(applicationURL.path) using \(iconURL.path)\nmetadata",
+            ]
+        )
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "new"),
+            locator: StubLocator(),
+            applier: ErrorApplier(error: failure)
+        )
+
+        _ = await coordinator.repair(mapping, reason: .manual)
+        let details = await coordinator.failureDetails(for: mapping.id)
+
+        XCTAssertEqual(details?.domain, "com.guigx.macicns.helper")
+        XCTAssertEqual(details?.code, 42)
+        XCTAssertFalse(details?.description.contains(applicationURL.path) == true)
+        XCTAssertFalse(details?.description.contains(iconURL.path) == true)
+        XCTAssertFalse(details?.description.contains("\n") == true)
+    }
+
     func testRepairCoalescesSimultaneousRequestsForSameMapping() async throws {
         var mapping = makeMapping()
         mapping.appFingerprint = "old-app"
