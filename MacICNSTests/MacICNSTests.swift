@@ -13,6 +13,11 @@ final class MacICNSTests: XCTestCase {
         XCTAssertFalse(FileSelectionValidator.isIcon(URL(filePath: "/tmp/Icon.png")))
     }
 
+    func testMappingToggleLabelReflectsPersistedEnabledState() {
+        XCTAssertEqual(MappingRowPresentation.toggleLabel(isEnabled: true), "Enabled")
+        XCTAssertEqual(MappingRowPresentation.toggleLabel(isEnabled: false), "Disabled")
+    }
+
     func testFSEventPathDecoderReadsCStringVector() {
         let first = strdup("/Applications/Spotify.app")!
         let second = strdup("/Applications/Spotify.app/Contents/Info.plist")!

@@ -148,9 +148,11 @@ private struct MappingRowView: View {
                     get: { mapping.isEnabled },
                     set: { newValue in setEnabled(newValue) }
                 ))
+                .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .help(mapping.isEnabled ? "Restore Original Icon" : "Apply Custom Icon")
+                .accessibilityLabel(MappingRowPresentation.toggleLabel(isEnabled: mapping.isEnabled))
 
                 Button(role: .destructive, action: delete) {
                     Image(systemName: "trash")
@@ -178,6 +180,12 @@ private struct MappingRowView: View {
             .scaledToFit()
             .frame(width: 40, height: 40)
             .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+enum MappingRowPresentation {
+    static func toggleLabel(isEnabled: Bool) -> String {
+        isEnabled ? "Enabled" : "Disabled"
     }
 }
 
