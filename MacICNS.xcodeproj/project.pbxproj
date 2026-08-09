@@ -52,6 +52,8 @@
 		AA0000000000000000000002 /* ApplicationIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ApplicationIconProvider.swift */; };
 		AA0000000000000000000003 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000014 /* AppIcon.icns */; };
 		AB0000000000000000000001 /* PrivilegedIconWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000011 /* PrivilegedIconWriterTests.swift */; };
+		AC0000000000000000000001 /* StableApplicationIconWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000011 /* StableApplicationIconWriter.swift */; };
+		AC0000000000000000000002 /* StableApplicationIconWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000011 /* StableApplicationIconWriter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -140,6 +142,7 @@
 		AA0000000000000000000013 /* AppIconSource.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIconSource.png; sourceTree = "<group>"; };
 		AA0000000000000000000014 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		AB0000000000000000000011 /* PrivilegedIconWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedIconWriterTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000011 /* StableApplicationIconWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StableApplicationIconWriter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -308,6 +311,7 @@
 				A50000000000000000000013 /* IconApplyRequest.swift */,
 				A60000000000000000000011 /* CodeSigningRequirements.swift */,
 				A60000000000000000000012 /* PrivilegedPathValidator.swift */,
+				AC0000000000000000000011 /* StableApplicationIconWriter.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -450,6 +454,7 @@
 				A80000000000000000000002 /* RepairScheduler.swift in Sources */,
 				A80000000000000000000003 /* MappingFileMonitor.swift in Sources */,
 				A90000000000000000000003 /* LoginItemService.swift in Sources */,
+				AC0000000000000000000001 /* StableApplicationIconWriter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -465,6 +470,7 @@
 				A60000000000000000000003 /* CodeSigningRequirements.swift in Sources */,
 				A60000000000000000000004 /* PrivilegedPathValidator.swift in Sources */,
 				A60000000000000000000005 /* IconDataReader.swift in Sources */,
+				AC0000000000000000000002 /* StableApplicationIconWriter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
