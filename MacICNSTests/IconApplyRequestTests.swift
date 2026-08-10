@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import MacICNS
 
+@MainActor
 final class IconApplyRequestTests: XCTestCase {
     private var temporaryDirectory: URL!
     private var applicationURL: URL!
@@ -66,6 +67,8 @@ final class IconApplyRequestTests: XCTestCase {
         )
 
         XCTAssertEqual(decodedRequest.applicationURL, protectedApplicationURL.standardizedFileURL)
+        XCTAssertFalse(decodedRequest.finderIconMetadata.resourceFork.isEmpty)
+        XCTAssertEqual(decodedRequest.finderIconMetadata.iconFinderInfo.count, 32)
     }
 
     func testResetAcceptsAnExistingApplication() throws {

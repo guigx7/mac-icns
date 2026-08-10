@@ -10,7 +10,10 @@ struct PrivilegedHelperClient: IconApplying, Sendable {
     }
 
     func apply(applicationURL: URL, iconURL: URL) async throws {
-        try await apply(IconApplyRequest(applicationURL: applicationURL, iconURL: iconURL))
+        let request = try await MainActor.run {
+            try IconApplyRequest(applicationURL: applicationURL, iconURL: iconURL)
+        }
+        try await apply(request)
     }
 
     func apply(_ request: IconApplyRequest) async throws {

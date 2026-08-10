@@ -2,6 +2,32 @@ import AppKit
 import Darwin
 import Foundation
 
+struct FinderIconMetadata: Sendable {
+    enum ValidationError: Error, Equatable, Sendable {
+        case invalidResourceFork
+        case invalidFinderInfo
+    }
+
+    static let maximumResourceForkByteCount = 64 * 1024 * 1024
+    static let finderInfoByteCount = 32
+
+    let resourceFork: Data
+    let iconFinderInfo: Data
+
+    init(resourceFork: Data, iconFinderInfo: Data) throws {
+        guard !resourceFork.isEmpty,
+              resourceFork.count <= Self.maximumResourceForkByteCount
+        else {
+            throw ValidationError.invalidResourceFork
+        }
+        guard iconFinderInfo.count == Self.finderInfoByteCount else {
+            throw ValidationError.invalidFinderInfo
+        }
+        self.resourceFork = resourceFork
+        self.iconFinderInfo = iconFinderInfo
+    }
+}
+
 struct StableApplicationIconWriter {
     enum WriteError: LocalizedError, Sendable {
         case stagingFailed
@@ -29,11 +55,10 @@ struct StableApplicationIconWriter {
     private static let iconFileName = "Icon\r"
     private static let finderInfoName = "com.apple.FinderInfo"
     private static let resourceForkName = "com.apple.ResourceFork"
-    private static let finderInfoByteCount = 32
     private static let customIconFlag: UInt16 = 0x0400
-    private static let maximumMetadataByteCount = 64 * 1024 * 1024
 
-    func apply(image: NSImage, toApplicationDescriptor descriptor: Int32) throws {
+    @MainActor
+    func prepareMetadata(for image: NSImage) throws -> FinderIconMetadata {
         let stagingDirectory = URL(filePath: "/private/tmp", directoryHint: .isDirectory)
             .appending(path: "MacICNS-IconMetadata-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(
@@ -79,15 +104,38 @@ struct StableApplicationIconWriter {
         guard let resourceFork = try readExtendedAttribute(
             Self.resourceForkName,
             descriptor: stagingIconDescriptor,
-            maximumByteCount: Self.maximumMetadataByteCount
+            maximumByteCount: FinderIconMetadata.maximumResourceForkByteCount
         ), !resourceFork.isEmpty,
         let iconFinderInfo = try readExtendedAttribute(
             Self.finderInfoName,
             descriptor: stagingIconDescriptor,
-            maximumByteCount: Self.finderInfoByteCount
+            maximumByteCount: FinderIconMetadata.finderInfoByteCount
         ) else {
             throw WriteError.missingIconMetadata
         }
+
+        return try FinderIconMetadata(
+            resourceFork: resourceFork,
+            iconFinderInfo: iconFinderInfo
+        )
+    }
+
+    @MainActor
+    func apply(image: NSImage, toApplicationDescriptor descriptor: Int32) throws {
+        try apply(
+            metadata: prepareMetadata(for: image),
+            toApplicationDescriptor: descriptor
+        )
+    }
+
+    func apply(
+        metadata: FinderIconMetadata,
+        toApplicationDescriptor descriptor: Int32
+    ) throws {
+        let validatedMetadata = try FinderIconMetadata(
+            resourceFork: metadata.resourceFork,
+            iconFinderInfo: metadata.iconFinderInfo
+        )
 
         let targetIconDescriptor = openat(
             descriptor,
@@ -111,12 +159,12 @@ struct StableApplicationIconWriter {
 
         try writeExtendedAttribute(
             Self.resourceForkName,
-            data: resourceFork,
+            data: validatedMetadata.resourceFork,
             descriptor: targetIconDescriptor
         )
         try writeExtendedAttribute(
             Self.finderInfoName,
-            data: iconFinderInfo,
+            data: validatedMetadata.iconFinderInfo,
             descriptor: targetIconDescriptor
         )
         try updateFinderFlags(descriptor: descriptor) { $0 | Self.customIconFlag }
@@ -165,12 +213,14 @@ struct StableApplicationIconWriter {
         let existing = try readExtendedAttribute(
             Self.finderInfoName,
             descriptor: descriptor,
-            maximumByteCount: Self.finderInfoByteCount
+            maximumByteCount: FinderIconMetadata.finderInfoByteCount
         )
         guard existing != nil || createIfMissing else { return }
 
-        var finderInfo = [UInt8](existing ?? Data(repeating: 0, count: Self.finderInfoByteCount))
-        guard finderInfo.count == Self.finderInfoByteCount else {
+        var finderInfo = [UInt8](
+            existing ?? Data(repeating: 0, count: FinderIconMetadata.finderInfoByteCount)
+        )
+        guard finderInfo.count == FinderIconMetadata.finderInfoByteCount else {
             throw WriteError.unsafeIconMetadata
         }
         let flags = UInt16(finderInfo[8]) << 8 | UInt16(finderInfo[9])

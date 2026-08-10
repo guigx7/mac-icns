@@ -4,6 +4,7 @@ import Foundation
 import XCTest
 @testable import MacICNS
 
+@MainActor
 final class PrivilegedIconWriterTests: XCTestCase {
     private var temporaryDirectory: URL!
 
@@ -99,9 +100,11 @@ final class PrivilegedIconWriterTests: XCTestCase {
         )
         defer { close(descriptor) }
         let image = try XCTUnwrap(NSImage(contentsOf: systemIconURL))
+        let writer = StableApplicationIconWriter()
+        let metadata = try writer.prepareMetadata(for: image)
 
-        try StableApplicationIconWriter().apply(
-            image: image,
+        try writer.apply(
+            metadata: metadata,
             toApplicationDescriptor: descriptor
         )
 
