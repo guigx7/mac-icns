@@ -18,6 +18,10 @@ final class MacICNSTests: XCTestCase {
         XCTAssertEqual(MappingRowPresentation.toggleLabel(isEnabled: false), "Disabled")
     }
 
+    func testMappingRowExposesChangeIconLabel() {
+        XCTAssertEqual(MappingRowPresentation.changeIconLabel, "Change icon")
+    }
+
     @MainActor
     func testInstalledHelperPresentationOffersUpdate() {
         XCTAssertEqual(
@@ -313,6 +317,86 @@ final class MacICNSTests: XCTestCase {
         await applyTask.value
         XCTAssertFalse(appState.isBusy(mapping))
     }
+
+    @MainActor
+    func testEnabledIconReplacementPersistsAfterApply() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let repository = MemoryMappingRepository([mapping])
+        let applier = IconReplacementApplier()
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "same"),
+                applier: applier
+            )
+        )
+        appState.loadMappings()
+        try await Task.sleep(for: .milliseconds(50))
+
+        await appState.replaceIcon(for: mapping, with: fixture.replacementIconURL)
+
+        XCTAssertEqual(
+            repository.savedMappings.first?.iconURL,
+            fixture.replacementIconURL.standardizedFileURL
+        )
+        let appliedIconURLs = await applier.appliedIconURLs
+        XCTAssertEqual(appliedIconURLs, [fixture.replacementIconURL])
+    }
+
+    @MainActor
+    func testFailedEnabledIconReplacementPreservesPreviousMapping() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let repository = MemoryMappingRepository([mapping])
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "same"),
+                applier: IconReplacementApplier(failApply: true)
+            )
+        )
+        appState.loadMappings()
+        try await Task.sleep(for: .milliseconds(50))
+
+        await appState.replaceIcon(for: mapping, with: fixture.replacementIconURL)
+
+        XCTAssertEqual(repository.savedMappings.first?.iconURL, mapping.iconURL)
+        XCTAssertEqual(appState.mappings.first?.iconURL, mapping.iconURL)
+        XCTAssertNotNil(appState.operationError)
+    }
+
+    @MainActor
+    func testDisabledIconReplacementPersistsWithoutApplying() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.isEnabled = false
+        let repository = MemoryMappingRepository([mapping])
+        let applier = IconReplacementApplier()
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: applier)
+        )
+        appState.loadMappings()
+        try await Task.sleep(for: .milliseconds(50))
+
+        await appState.replaceIcon(for: mapping, with: fixture.replacementIconURL)
+
+        XCTAssertEqual(
+            repository.savedMappings.first?.iconURL,
+            fixture.replacementIconURL.standardizedFileURL
+        )
+        XCTAssertEqual(repository.savedMappings.first?.isEnabled, false)
+        let appliedIconURLs = await applier.appliedIconURLs
+        XCTAssertEqual(appliedIconURLs, [])
+    }
 }
 
 private struct EmptyMappingRepository: MappingRepository {
@@ -400,6 +484,24 @@ private actor UpdateRecordingApplier: IconApplying {
     func reset(applicationURL: URL) async throws {}
 }
 
+private actor IconReplacementApplier: IconApplying {
+    private(set) var appliedIconURLs: [URL] = []
+    private let failApply: Bool
+
+    init(failApply: Bool = false) {
+        self.failApply = failApply
+    }
+
+    func apply(applicationURL: URL, iconURL: URL) async throws {
+        if failApply {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        appliedIconURLs.append(iconURL)
+    }
+
+    func reset(applicationURL: URL) async throws {}
+}
+
 private enum HelperUpdateTestError: Error {
     case registrationFailed
     case unregisterFailed
@@ -408,14 +510,17 @@ private enum HelperUpdateTestError: Error {
 private struct MappingFixture {
     let directory: URL
     let mapping: IconMapping
+    let replacementIconURL: URL
 
     init() throws {
         directory = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString, directoryHint: .isDirectory)
         let applicationURL = directory.appending(path: "Example.app", directoryHint: .isDirectory)
         let iconURL = directory.appending(path: "Example.icns")
+        replacementIconURL = directory.appending(path: "Replacement.icns")
         try FileManager.default.createDirectory(at: applicationURL, withIntermediateDirectories: true)
         try Data("icon".utf8).write(to: iconURL)
+        try Data("replacement".utf8).write(to: replacementIconURL)
         mapping = IconMapping(applicationURL: applicationURL, bundleIdentifier: nil, iconURL: iconURL)
     }
 

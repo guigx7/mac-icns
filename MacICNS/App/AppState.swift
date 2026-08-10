@@ -93,6 +93,49 @@ final class AppState: ObservableObject {
         await monitor.start(mappings: mappings)
     }
 
+    func replaceIcon(for mapping: IconMapping, with iconURL: URL) async {
+        guard !busyMappingIDs.contains(mapping.id),
+              let current = mappings.first(where: { $0.id == mapping.id })
+        else {
+            return
+        }
+        busyMappingIDs.insert(mapping.id)
+        defer { busyMappingIDs.remove(mapping.id) }
+        mappingRevision += 1
+        operationError = nil
+
+        var candidate = current
+        candidate.iconURL = iconURL.standardizedFileURL
+        candidate.appFingerprint = nil
+        candidate.iconFingerprint = nil
+        candidate.lastSuccessAt = nil
+
+        guard candidate.isEnabled else {
+            replace(candidate)
+            mappingFailureMessages[candidate.id] = nil
+            saveMappings()
+            await monitor.start(mappings: mappings)
+            recordDiagnostic("Changed the icon file for disabled mapping \(candidate.id).")
+            return
+        }
+
+        let repaired = await repairCoordinator.repair(candidate, reason: .mappingEdited)
+        guard repaired.status == .upToDate else {
+            await synchronizeFailureDetails(for: [repaired])
+            operationError = mappingFailureMessages[repaired.id]
+                ?? "The new icon could not be applied, so the previous mapping was preserved."
+            await monitor.start(mappings: mappings)
+            recordDiagnostic("Could not replace the icon file for mapping \(candidate.id).")
+            return
+        }
+
+        replace(repaired)
+        await synchronizeFailureDetails(for: [repaired])
+        saveMappings()
+        await monitor.start(mappings: mappings)
+        recordDiagnostic("Replaced and applied the icon file for mapping \(candidate.id).")
+    }
+
     func refreshAll() async {
         await refreshAll(reason: .manual, diagnosticMessage: "Manual icon refresh requested.")
     }

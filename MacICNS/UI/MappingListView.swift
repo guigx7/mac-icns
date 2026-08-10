@@ -27,6 +27,7 @@ struct MappingListView: View {
                                 isBusy: appState.isBusy(mapping),
                                 failureMessage: appState.failureMessage(for: mapping),
                                 apply: { Task { await appState.apply(mapping) } },
+                                changeIcon: { chooseReplacementIcon(for: mapping) },
                                 setEnabled: { isEnabled in
                                     Task { await appState.setEnabled(isEnabled, for: mapping) }
                                 },
@@ -84,6 +85,26 @@ struct MappingListView: View {
             }
         }
     }
+
+    private func chooseReplacementIcon(for mapping: IconMapping) {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Replacement ICNS File"
+        panel.prompt = "Choose"
+        panel.allowedContentTypes = [FileSelectionValidator.icnsType]
+        panel.directoryURL = FileSelectionValidator.lastIconDirectory
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+
+        panel.begin { response in
+            guard response == .OK,
+                  let url = panel.url,
+                  FileSelectionValidator.isIcon(url) else { return }
+
+            FileSelectionValidator.lastIconDirectory = url.deletingLastPathComponent()
+            Task { await appState.replaceIcon(for: mapping, with: url) }
+        }
+    }
 }
 
 private struct MappingRowView: View {
@@ -93,6 +114,7 @@ private struct MappingRowView: View {
     let isBusy: Bool
     let failureMessage: String?
     let apply: () -> Void
+    let changeIcon: () -> Void
     let setEnabled: (Bool) -> Void
     let delete: () -> Void
 
@@ -152,6 +174,14 @@ private struct MappingRowView: View {
                     .accessibilityLabel("Apply custom icon again")
                 }
 
+                Button(action: changeIcon) {
+                    Image(systemName: "photo.badge.arrow.down")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("Change Icon")
+                .accessibilityLabel(MappingRowPresentation.changeIconLabel)
+
                 Toggle("Enabled", isOn: Binding(
                     get: { mapping.isEnabled },
                     set: { newValue in setEnabled(newValue) }
@@ -192,6 +222,8 @@ private struct MappingRowView: View {
 }
 
 enum MappingRowPresentation {
+    static let changeIconLabel = "Change icon"
+
     static func toggleLabel(isEnabled: Bool) -> String {
         isEnabled ? "Enabled" : "Disabled"
     }
