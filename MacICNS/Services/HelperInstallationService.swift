@@ -10,12 +10,12 @@ final class HelperInstallationService {
     }
 
     enum UpdateError: LocalizedError {
-        case removalTimedOut
+        case registrationTimedOut
 
         var errorDescription: String? {
             switch self {
-            case .removalTimedOut:
-                "macOS did not finish removing the previous helper. Please try again."
+            case .registrationTimedOut:
+                "macOS did not finish updating the helper. Please try again."
             }
         }
     }
@@ -24,6 +24,8 @@ final class HelperInstallationService {
     private let registerAction: () throws -> Void
     private let unregisterAction: () async throws -> Void
     private let openSettingsAction: () -> Void
+    private let registrationRetryLimit: Int
+    private let registrationRetryDelay: () async throws -> Void
 
     init(service: SMAppService = .daemon(plistName: "com.guigx.macicns.helper.plist")) {
         statusProvider = {
@@ -57,18 +59,28 @@ final class HelperInstallationService {
             }
             NSWorkspace.shared.open(settingsURL)
         }
+        registrationRetryLimit = 40
+        registrationRetryDelay = {
+            try await Task.sleep(for: .milliseconds(250))
+        }
     }
 
     init(
         statusProvider: @escaping () -> Status,
         register: @escaping () throws -> Void,
         unregister: @escaping () async throws -> Void,
-        openSettings: @escaping () -> Void
+        openSettings: @escaping () -> Void,
+        registrationRetryLimit: Int = 40,
+        registrationRetryDelay: @escaping () async throws -> Void = {
+            try await Task.sleep(for: .milliseconds(250))
+        }
     ) {
         self.statusProvider = statusProvider
         registerAction = register
         unregisterAction = unregister
         openSettingsAction = openSettings
+        self.registrationRetryLimit = max(1, registrationRetryLimit)
+        self.registrationRetryDelay = registrationRetryDelay
     }
 
     var status: Status {
@@ -91,20 +103,26 @@ final class HelperInstallationService {
                 throw error
             }
         }
-        try await waitUntilRemoved()
-        try registerAction()
+        try await registerAfterRemoval()
     }
 
-    private func waitUntilRemoved() async throws {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(10))
-
-        while statusProvider() != .notInstalled {
-            guard clock.now < deadline else {
-                throw UpdateError.removalTimedOut
+    private func registerAfterRemoval() async throws {
+        for attempt in 1...registrationRetryLimit {
+            do {
+                try registerAction()
+                return
+            } catch where isTransientRegistrationFailure(error) {
+                guard attempt < registrationRetryLimit else {
+                    throw UpdateError.registrationTimedOut
+                }
+                try await registrationRetryDelay()
             }
-            try await Task.sleep(for: .milliseconds(100))
         }
+    }
+
+    private func isTransientRegistrationFailure(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == "SMAppServiceErrorDomain" && error.code == 1
     }
 
     func openLoginItemsAndExtensions() {

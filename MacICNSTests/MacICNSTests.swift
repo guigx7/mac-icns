@@ -51,28 +51,83 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
-    func testHelperUpdateWaitsUntilServiceManagementReportsRemoval() async throws {
-        var statusReads = 0
-        var didRegister = false
+    func testHelperUpdateRetriesTransientRegistrationFailure() async throws {
+        var attempts = 0
+        var delays = 0
         let service = HelperInstallationService(
-            statusProvider: {
-                statusReads += 1
-                return statusReads >= 3 ? .notInstalled : .installed
-            },
+            statusProvider: { .notInstalled },
             register: {
-                guard statusReads >= 3 else {
-                    throw HelperUpdateTestError.serviceStillRegistered
+                attempts += 1
+                if attempts < 3 {
+                    throw NSError(domain: "SMAppServiceErrorDomain", code: 1)
                 }
-                didRegister = true
             },
             unregister: {},
-            openSettings: {}
+            openSettings: {},
+            registrationRetryLimit: 4,
+            registrationRetryDelay: { delays += 1 }
         )
 
         try await service.update()
 
-        XCTAssertTrue(didRegister)
-        XCTAssertGreaterThanOrEqual(statusReads, 3)
+        XCTAssertEqual(attempts, 3)
+        XCTAssertEqual(delays, 2)
+    }
+
+    @MainActor
+    func testHelperUpdateDoesNotRetryUnrelatedRegistrationFailure() async {
+        var attempts = 0
+        var delays = 0
+        let service = HelperInstallationService(
+            statusProvider: { .notInstalled },
+            register: {
+                attempts += 1
+                throw HelperUpdateTestError.registrationFailed
+            },
+            unregister: {},
+            openSettings: {},
+            registrationRetryLimit: 4,
+            registrationRetryDelay: { delays += 1 }
+        )
+
+        do {
+            try await service.update()
+            XCTFail("Expected the unrelated registration failure to propagate.")
+        } catch HelperUpdateTestError.registrationFailed {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertEqual(attempts, 1)
+        XCTAssertEqual(delays, 0)
+    }
+
+    @MainActor
+    func testHelperUpdateReportsRetryExhaustion() async {
+        var attempts = 0
+        var delays = 0
+        let service = HelperInstallationService(
+            statusProvider: { .notInstalled },
+            register: {
+                attempts += 1
+                throw NSError(domain: "SMAppServiceErrorDomain", code: 1)
+            },
+            unregister: {},
+            openSettings: {},
+            registrationRetryLimit: 3,
+            registrationRetryDelay: { delays += 1 }
+        )
+
+        do {
+            try await service.update()
+            XCTFail("Expected registration retry exhaustion.")
+        } catch HelperInstallationService.UpdateError.registrationTimedOut {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertEqual(attempts, 3)
+        XCTAssertEqual(delays, 2)
     }
 
     @MainActor
@@ -346,7 +401,7 @@ private actor UpdateRecordingApplier: IconApplying {
 }
 
 private enum HelperUpdateTestError: Error {
-    case serviceStillRegistered
+    case registrationFailed
     case unregisterFailed
 }
 
