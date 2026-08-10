@@ -28,6 +28,139 @@ final class MacICNSTests: XCTestCase {
             HelperSettingsPresentation.primaryActionTitle(for: .installed),
             "Update Helper"
         )
+        XCTAssertEqual(
+            HelperSettingsPresentation.primaryActionTitle(for: .updateRequired),
+            "Update Helper"
+        )
+        XCTAssertEqual(
+            HelperSettingsPresentation.primaryActionTitle(for: .unavailable),
+            "Update Helper"
+        )
+    }
+
+    @MainActor
+    func testEnabledRegistrationWithMatchingHandshakeIsInstalled() async {
+        let service = HelperInstallationService(
+            statusProvider: { .installed },
+            register: {},
+            unregister: {},
+            openSettings: {},
+            versionProvider: { 2 }
+        )
+
+        let status = await service.operationalStatus()
+        XCTAssertEqual(status, .installed)
+    }
+
+    @MainActor
+    func testEnabledRegistrationWithOldHandshakeRequiresUpdate() async {
+        let service = HelperInstallationService(
+            statusProvider: { .installed },
+            register: {},
+            unregister: {},
+            openSettings: {},
+            versionProvider: { 1 }
+        )
+
+        let status = await service.operationalStatus()
+        XCTAssertEqual(status, .updateRequired)
+    }
+
+    @MainActor
+    func testEnabledRegistrationWithUnreachableHandshakeIsUnavailable() async {
+        let service = HelperInstallationService(
+            statusProvider: { .installed },
+            register: {},
+            unregister: {},
+            openSettings: {},
+            versionProvider: { throw NSError(domain: "test.helper", code: 1) }
+        )
+
+        let status = await service.operationalStatus()
+        XCTAssertEqual(status, .unavailable)
+    }
+
+    @MainActor
+    func testHelperUpdateWaitsForMatchingProtocolVersion() async throws {
+        var status = HelperInstallationService.Status.installed
+        var versions = [1, 1, 2]
+        var checks = 0
+        let service = HelperInstallationService(
+            statusProvider: { status },
+            register: { status = .installed },
+            unregister: { status = .notInstalled },
+            openSettings: {},
+            versionProvider: {
+                checks += 1
+                return versions.removeFirst()
+            },
+            readinessRetryLimit: 3,
+            readinessRetryDelay: {}
+        )
+
+        try await service.update()
+
+        XCTAssertEqual(checks, 3)
+    }
+
+    @MainActor
+    func testHelperUpdateReportsReadinessExhaustion() async {
+        var status = HelperInstallationService.Status.installed
+        let service = HelperInstallationService(
+            statusProvider: { status },
+            register: { status = .installed },
+            unregister: { status = .notInstalled },
+            openSettings: {},
+            versionProvider: { 1 },
+            readinessRetryLimit: 2,
+            readinessRetryDelay: {}
+        )
+
+        do {
+            try await service.update()
+            XCTFail("Expected helper readiness exhaustion.")
+        } catch HelperInstallationService.UpdateError.helperDidNotBecomeReady {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    @MainActor
+    func testFailedHelperReadinessDoesNotReapplyMappings() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let applier = UpdateRecordingApplier()
+        let coordinator = RepairCoordinator(
+            fingerprinting: ConstantFingerprinting(value: "same"),
+            applier: applier
+        )
+        var status = HelperInstallationService.Status.installed
+        let service = HelperInstallationService(
+            statusProvider: { status },
+            register: { status = .installed },
+            unregister: { status = .notInstalled },
+            openSettings: {},
+            versionProvider: { 1 },
+            readinessRetryLimit: 2,
+            readinessRetryDelay: {}
+        )
+        let appState = AppState(
+            repository: MemoryMappingRepository([mapping]),
+            repairCoordinator: coordinator,
+            helperInstallationService: service
+        )
+        appState.loadMappings()
+        try await Task.sleep(for: .milliseconds(50))
+
+        await appState.updateHelper()
+
+        let applyCount = await applier.applyCount
+        XCTAssertEqual(applyCount, 0)
+        XCTAssertEqual(appState.helperStatus, .updateRequired)
+        XCTAssertNotNil(appState.helperError)
     }
 
     @MainActor
@@ -58,15 +191,17 @@ final class MacICNSTests: XCTestCase {
     func testHelperUpdateRetriesTransientRegistrationFailure() async throws {
         var attempts = 0
         var delays = 0
+        var status = HelperInstallationService.Status.installed
         let service = HelperInstallationService(
-            statusProvider: { .notInstalled },
+            statusProvider: { status },
             register: {
                 attempts += 1
                 if attempts < 3 {
                     throw NSError(domain: "SMAppServiceErrorDomain", code: 1)
                 }
+                status = .installed
             },
-            unregister: {},
+            unregister: { status = .notInstalled },
             openSettings: {},
             registrationRetryLimit: 4,
             registrationRetryDelay: { delays += 1 }
@@ -81,15 +216,17 @@ final class MacICNSTests: XCTestCase {
     @MainActor
     func testHelperUpdateDefaultRetryWindowOutlastsDelayedServiceRelease() async throws {
         var attempts = 0
+        var status = HelperInstallationService.Status.installed
         let service = HelperInstallationService(
-            statusProvider: { .notInstalled },
+            statusProvider: { status },
             register: {
                 attempts += 1
                 if attempts <= 60 {
                     throw NSError(domain: "SMAppServiceErrorDomain", code: 1)
                 }
+                status = .installed
             },
-            unregister: {},
+            unregister: { status = .notInstalled },
             openSettings: {},
             registrationRetryDelay: {}
         )

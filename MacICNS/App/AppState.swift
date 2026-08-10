@@ -5,7 +5,7 @@ import Foundation
 final class AppState: ObservableObject {
     @Published private(set) var mappings: [IconMapping] = []
     @Published private(set) var persistenceError: String?
-    @Published private(set) var helperStatus: HelperInstallationService.Status
+    @Published private(set) var helperStatus: HelperInstallationService.OperationalStatus
     @Published private(set) var helperError: String?
     @Published private(set) var helperIsUpdating = false
     @Published private(set) var operationError: String?
@@ -37,7 +37,7 @@ final class AppState: ObservableObject {
         self.repairCoordinator = repairCoordinator
         self.helperInstallationService = helperInstallationService
         self.diagnosticLogger = diagnosticLogger
-        helperStatus = helperInstallationService.status
+        helperStatus = helperInstallationService.initialOperationalStatus
     }
 
     func launch() {
@@ -45,7 +45,9 @@ final class AppState: ObservableObject {
             return
         }
         hasLaunched = true
-        refreshHelperStatus()
+        Task { [weak self] in
+            await self?.refreshHelperStatus()
+        }
         loadMappings()
     }
 
@@ -238,31 +240,44 @@ final class AppState: ObservableObject {
         persistenceError = nil
     }
 
-    func refreshHelperStatus() {
+    func refreshHelperStatus() async {
         let previousStatus = helperStatus
-        helperStatus = helperInstallationService.status
+        helperStatus = await helperInstallationService.operationalStatus()
         helperError = nil
         if helperStatus == .requiresApproval {
             recordDiagnostic("Privileged helper requires approval.")
         }
         if previousStatus != .installed, helperStatus == .installed {
             recordDiagnostic("Privileged helper became available; refreshing icons.")
-            Task { [weak self] in
-                await self?.refreshAll(
-                    reason: .helperUpdated,
-                    diagnosticMessage: "Reapplying icons after helper became available."
-                )
-            }
+            await refreshAll(
+                reason: .helperUpdated,
+                diagnosticMessage: "Reapplying icons after helper became available."
+            )
         }
     }
 
-    func installHelper() {
+    func installHelper() async {
+        guard !helperIsUpdating else { return }
+        helperIsUpdating = true
+        helperError = nil
+        defer { helperIsUpdating = false }
+
         do {
-            try helperInstallationService.install()
+            try await helperInstallationService.installAndWaitUntilReady()
+            helperStatus = await helperInstallationService.operationalStatus()
+            guard helperStatus == .installed else {
+                helperError = "The helper was registered but stopped responding. Please try again."
+                recordDiagnostic("Privileged helper stopped responding after installation.")
+                return
+            }
             helperError = nil
-            recordDiagnostic("Privileged helper registration requested.")
-            refreshHelperStatus()
+            recordDiagnostic("Privileged helper was installed successfully.")
+            await refreshAll(
+                reason: .helperUpdated,
+                diagnosticMessage: "Reapplying enabled icons after helper installation."
+            )
         } catch {
+            helperStatus = await helperInstallationService.operationalStatus()
             helperError = "Could not install the helper: \(error.localizedDescription)"
             recordDiagnostic("Could not install privileged helper: \(error.localizedDescription)")
         }
@@ -276,10 +291,10 @@ final class AppState: ObservableObject {
 
         do {
             try await helperInstallationService.update()
-            helperStatus = helperInstallationService.status
+            helperStatus = await helperInstallationService.operationalStatus()
             guard helperStatus == .installed else {
-                helperError = "The helper update needs approval in Login Items & Extensions."
-                recordDiagnostic("Privileged helper update requires approval.")
+                helperError = "The helper was updated but stopped responding. Please try again."
+                recordDiagnostic("Privileged helper stopped responding after update.")
                 return
             }
             recordDiagnostic("Privileged helper was updated successfully.")
@@ -288,7 +303,7 @@ final class AppState: ObservableObject {
                 diagnosticMessage: "Reapplying enabled icons after helper update."
             )
         } catch {
-            helperStatus = helperInstallationService.status
+            helperStatus = await helperInstallationService.operationalStatus()
             helperError = "Could not update the helper: \(error.localizedDescription)"
             recordDiagnostic("Could not update privileged helper: \(sanitizedDescription(error))")
         }

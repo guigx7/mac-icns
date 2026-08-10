@@ -73,10 +73,10 @@ private struct SettingsView: View {
                     for: appState.helperStatus
                 ) {
                     Button(actionTitle) {
-                        if appState.helperStatus == .installed {
-                            Task { await appState.updateHelper() }
+                        if appState.helperStatus == .notInstalled {
+                            Task { await appState.installHelper() }
                         } else {
-                            appState.installHelper()
+                            Task { await appState.updateHelper() }
                         }
                     }
                     .disabled(appState.helperIsUpdating)
@@ -95,7 +95,7 @@ private struct SettingsView: View {
                         .foregroundStyle(.red)
                 }
                 Button("Refresh Helper Status") {
-                    appState.refreshHelperStatus()
+                    Task { await appState.refreshHelperStatus() }
                 }
                 .disabled(appState.helperIsUpdating)
             }
@@ -103,7 +103,7 @@ private struct SettingsView: View {
         .padding()
         .frame(width: 380)
         .onAppear {
-            appState.refreshHelperStatus()
+            Task { await appState.refreshHelperStatus() }
         }
     }
 
@@ -115,16 +115,20 @@ private struct SettingsView: View {
             "Helper needs approval in Login Items & Extensions."
         case .notInstalled:
             "Helper is not installed."
+        case .updateRequired:
+            "Helper update required."
+        case .unavailable:
+            "Helper is registered but unavailable."
         }
     }
 }
 
 enum HelperSettingsPresentation {
     static func primaryActionTitle(
-        for status: HelperInstallationService.Status
+        for status: HelperInstallationService.OperationalStatus
     ) -> String? {
         switch status {
-        case .installed:
+        case .installed, .updateRequired, .unavailable:
             "Update Helper"
         case .notInstalled:
             "Install Helper"

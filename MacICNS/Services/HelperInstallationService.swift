@@ -4,6 +4,7 @@ import ServiceManagement
 @MainActor
 final class HelperInstallationService {
     private static let defaultRegistrationRetryLimit = 120
+    private static let defaultReadinessRetryLimit = 40
 
     enum Status: Equatable {
         case notInstalled
@@ -11,13 +12,24 @@ final class HelperInstallationService {
         case requiresApproval
     }
 
+    enum OperationalStatus: Equatable {
+        case notInstalled
+        case installed
+        case requiresApproval
+        case updateRequired
+        case unavailable
+    }
+
     enum UpdateError: LocalizedError {
         case registrationTimedOut
+        case helperDidNotBecomeReady
 
         var errorDescription: String? {
             switch self {
             case .registrationTimedOut:
                 "macOS did not finish updating the helper. Please try again."
+            case .helperDidNotBecomeReady:
+                "The registered helper did not become ready. Please update it and try again."
             }
         }
     }
@@ -28,6 +40,9 @@ final class HelperInstallationService {
     private let openSettingsAction: () -> Void
     private let registrationRetryLimit: Int
     private let registrationRetryDelay: () async throws -> Void
+    private let versionProvider: () async throws -> Int
+    private let readinessRetryLimit: Int
+    private let readinessRetryDelay: () async throws -> Void
 
     init(service: SMAppService = .daemon(plistName: "com.guigx.macicns.helper.plist")) {
         statusProvider = {
@@ -65,6 +80,13 @@ final class HelperInstallationService {
         registrationRetryDelay = {
             try await Task.sleep(for: .milliseconds(250))
         }
+        versionProvider = {
+            try await PrivilegedHelperClient().protocolVersion()
+        }
+        readinessRetryLimit = Self.defaultReadinessRetryLimit
+        readinessRetryDelay = {
+            try await Task.sleep(for: .milliseconds(250))
+        }
     }
 
     init(
@@ -72,8 +94,13 @@ final class HelperInstallationService {
         register: @escaping () throws -> Void,
         unregister: @escaping () async throws -> Void,
         openSettings: @escaping () -> Void,
+        versionProvider: @escaping () async throws -> Int = { HelperProtocolVersion.current },
         registrationRetryLimit: Int = HelperInstallationService.defaultRegistrationRetryLimit,
         registrationRetryDelay: @escaping () async throws -> Void = {
+            try await Task.sleep(for: .milliseconds(250))
+        },
+        readinessRetryLimit: Int = HelperInstallationService.defaultReadinessRetryLimit,
+        readinessRetryDelay: @escaping () async throws -> Void = {
             try await Task.sleep(for: .milliseconds(250))
         }
     ) {
@@ -83,14 +110,45 @@ final class HelperInstallationService {
         openSettingsAction = openSettings
         self.registrationRetryLimit = max(1, registrationRetryLimit)
         self.registrationRetryDelay = registrationRetryDelay
+        self.versionProvider = versionProvider
+        self.readinessRetryLimit = max(1, readinessRetryLimit)
+        self.readinessRetryDelay = readinessRetryDelay
     }
 
     var status: Status {
         statusProvider()
     }
 
-    func install() throws {
+    var initialOperationalStatus: OperationalStatus {
+        switch statusProvider() {
+        case .notInstalled:
+            .notInstalled
+        case .requiresApproval:
+            .requiresApproval
+        case .installed:
+            .unavailable
+        }
+    }
+
+    func operationalStatus() async -> OperationalStatus {
+        switch statusProvider() {
+        case .notInstalled:
+            return .notInstalled
+        case .requiresApproval:
+            return .requiresApproval
+        case .installed:
+            do {
+                let version = try await versionProvider()
+                return version == HelperProtocolVersion.current ? .installed : .updateRequired
+            } catch {
+                return .unavailable
+            }
+        }
+    }
+
+    func installAndWaitUntilReady() async throws {
         try registerAction()
+        try await waitUntilReady()
     }
 
     func remove() async throws {
@@ -106,6 +164,7 @@ final class HelperInstallationService {
             }
         }
         try await registerAfterRemoval()
+        try await waitUntilReady()
     }
 
     private func registerAfterRemoval() async throws {
@@ -119,6 +178,18 @@ final class HelperInstallationService {
                 }
                 try await registrationRetryDelay()
             }
+        }
+    }
+
+    private func waitUntilReady() async throws {
+        for attempt in 1...readinessRetryLimit {
+            if await operationalStatus() == .installed {
+                return
+            }
+            guard attempt < readinessRetryLimit else {
+                throw UpdateError.helperDidNotBecomeReady
+            }
+            try await readinessRetryDelay()
         }
     }
 
