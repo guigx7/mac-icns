@@ -13,6 +13,21 @@ final class MacICNSTests: XCTestCase {
         )
     }
 
+    func testBundledHelperDeclaresApplicationAsResponsibleCode() throws {
+        let daemonURL = Bundle.main.bundleURL.appending(
+            path: "Contents/Library/LaunchDaemons/com.guigx.macicns.helper.plist"
+        )
+        let data = try Data(contentsOf: daemonURL)
+        let propertyList = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            propertyList["AssociatedBundleIdentifiers"] as? [String],
+            ["com.guigx.macicns"]
+        )
+    }
+
     func testFileSelectionValidatorAcceptsOnlyExpectedExtensions() {
         XCTAssertTrue(FileSelectionValidator.isApplication(URL(filePath: "/Applications/Example.app")))
         XCTAssertFalse(FileSelectionValidator.isApplication(URL(filePath: "/Applications/Example.icns")))
@@ -43,6 +58,22 @@ final class MacICNSTests: XCTestCase {
             HelperSettingsPresentation.primaryActionTitle(for: .unavailable),
             "Update Helper"
         )
+    }
+
+    @MainActor
+    func testAppManagementSettingsActionUsesDedicatedDestination() {
+        var openedAppManagementSettings = false
+        let service = HelperInstallationService(
+            statusProvider: { .installed },
+            register: {},
+            unregister: {},
+            openSettings: {},
+            openAppManagementSettings: { openedAppManagementSettings = true }
+        )
+
+        service.openAppManagement()
+
+        XCTAssertTrue(openedAppManagementSettings)
     }
 
     @MainActor

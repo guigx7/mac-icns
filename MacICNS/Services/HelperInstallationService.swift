@@ -38,6 +38,7 @@ final class HelperInstallationService {
     private let registerAction: () throws -> Void
     private let unregisterAction: () async throws -> Void
     private let openSettingsAction: () -> Void
+    private let openAppManagementSettingsAction: () -> Void
     private let registrationRetryLimit: Int
     private let registrationRetryDelay: () async throws -> Void
     private let versionProvider: () async throws -> Int
@@ -76,6 +77,14 @@ final class HelperInstallationService {
             }
             NSWorkspace.shared.open(settingsURL)
         }
+        openAppManagementSettingsAction = {
+            guard let settingsURL = URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles"
+            ) else {
+                return
+            }
+            NSWorkspace.shared.open(settingsURL)
+        }
         registrationRetryLimit = Self.defaultRegistrationRetryLimit
         registrationRetryDelay = {
             try await Task.sleep(for: .milliseconds(250))
@@ -94,6 +103,7 @@ final class HelperInstallationService {
         register: @escaping () throws -> Void,
         unregister: @escaping () async throws -> Void,
         openSettings: @escaping () -> Void,
+        openAppManagementSettings: @escaping () -> Void = {},
         versionProvider: @escaping () async throws -> Int = { HelperProtocolVersion.current },
         registrationRetryLimit: Int = HelperInstallationService.defaultRegistrationRetryLimit,
         registrationRetryDelay: @escaping () async throws -> Void = {
@@ -108,6 +118,7 @@ final class HelperInstallationService {
         registerAction = register
         unregisterAction = unregister
         openSettingsAction = openSettings
+        openAppManagementSettingsAction = openAppManagementSettings
         self.registrationRetryLimit = max(1, registrationRetryLimit)
         self.registrationRetryDelay = registrationRetryDelay
         self.versionProvider = versionProvider
@@ -200,5 +211,9 @@ final class HelperInstallationService {
 
     func openLoginItemsAndExtensions() {
         openSettingsAction()
+    }
+
+    func openAppManagement() {
+        openAppManagementSettingsAction()
     }
 }

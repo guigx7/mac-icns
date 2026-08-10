@@ -90,6 +90,12 @@ private struct SettingsView: View {
                         appState.openHelperApprovalSettings()
                     }
                 }
+                Button("Open App Management Settings") {
+                    appState.openAppManagementSettings()
+                }
+                Text("Enable MacICNS there so its helper can update protected applications.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if let helperError = appState.helperError {
                     Text(helperError)
                         .foregroundStyle(.red)

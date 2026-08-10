@@ -313,6 +313,10 @@ final class AppState: ObservableObject {
         helperInstallationService.openLoginItemsAndExtensions()
     }
 
+    func openAppManagementSettings() {
+        helperInstallationService.openAppManagement()
+    }
+
     private func replace(_ mapping: IconMapping) {
         guard let index = mappings.firstIndex(where: { $0.id == mapping.id }) else {
             return
