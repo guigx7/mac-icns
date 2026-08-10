@@ -58,6 +58,8 @@
 		AD0000000000000000000002 /* PrivilegedIconOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000011 /* PrivilegedIconOperation.swift */; };
 		AE0000000000000000000001 /* ApplicationEligibilityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0000000000000000000011 /* ApplicationEligibilityServiceTests.swift */; };
 		AE0000000000000000000002 /* ApplicationEligibilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0000000000000000000012 /* ApplicationEligibilityService.swift */; };
+		AF0000000000000000000001 /* ApplicationCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000011 /* ApplicationCatalogTests.swift */; };
+		AF0000000000000000000002 /* ApplicationCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000012 /* ApplicationCatalog.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -150,6 +152,8 @@
 		AD0000000000000000000011 /* PrivilegedIconOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedIconOperation.swift; sourceTree = "<group>"; };
 		AE0000000000000000000011 /* ApplicationEligibilityServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationEligibilityServiceTests.swift; sourceTree = "<group>"; };
 		AE0000000000000000000012 /* ApplicationEligibilityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationEligibilityService.swift; sourceTree = "<group>"; };
+		AF0000000000000000000011 /* ApplicationCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationCatalogTests.swift; sourceTree = "<group>"; };
+		AF0000000000000000000012 /* ApplicationCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationCatalog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -226,6 +230,7 @@
 				AA0000000000000000000011 /* ApplicationIconProviderTests.swift */,
 				AB0000000000000000000011 /* PrivilegedIconWriterTests.swift */,
 				AE0000000000000000000011 /* ApplicationEligibilityServiceTests.swift */,
+				AF0000000000000000000011 /* ApplicationCatalogTests.swift */,
 			);
 			path = MacICNSTests;
 			sourceTree = "<group>";
@@ -290,6 +295,7 @@
 		A30000000000000000000021 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				AF0000000000000000000012 /* ApplicationCatalog.swift */,
 				AE0000000000000000000012 /* ApplicationEligibilityService.swift */,
 				AA0000000000000000000012 /* ApplicationIconProvider.swift */,
 				A30000000000000000000013 /* BundleFingerprinting.swift */,
@@ -440,6 +446,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AF0000000000000000000002 /* ApplicationCatalog.swift in Sources */,
 				AE0000000000000000000002 /* ApplicationEligibilityService.swift in Sources */,
 				AA0000000000000000000002 /* ApplicationIconProvider.swift in Sources */,
 				A10000000000000000000001 /* MacICNSApp.swift in Sources */,
@@ -502,6 +509,7 @@
 				A90000000000000000000001 /* DiagnosticLoggerTests.swift in Sources */,
 				AB0000000000000000000001 /* PrivilegedIconWriterTests.swift in Sources */,
 				AE0000000000000000000001 /* ApplicationEligibilityServiceTests.swift in Sources */,
+				AF0000000000000000000001 /* ApplicationCatalogTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -231,35 +231,106 @@ enum MappingRowPresentation {
 
 private struct MappingEditorView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var catalog = ApplicationCatalog(entries: [])
+    @State private var searchText = ""
     @State private var applicationURL: URL?
     @State private var iconURL: URL?
+    @State private var validationMessage: String?
+    @State private var isLoading = true
 
+    private let catalogLoader: ApplicationCatalogLoader
+    private let iconProvider = ApplicationIconProvider()
     let save: (URL, URL) -> Void
 
+    init(
+        catalogLoader: ApplicationCatalogLoader = ApplicationCatalogLoader(),
+        save: @escaping (URL, URL) -> Void
+    ) {
+        self.catalogLoader = catalogLoader
+        self.save = save
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Add Icon Mapping")
                 .font(.title2.weight(.semibold))
 
-            selectionRow(
-                title: "Application",
-                selection: applicationURL?.lastPathComponent,
-                actionTitle: "Choose Application"
-            ) {
-                chooseApplication()
-            }
-
-            selectionRow(
-                title: "ICNS File",
-                selection: iconURL?.lastPathComponent,
-                actionTitle: "Choose ICNS File"
-            ) {
-                chooseIcon()
-            }
-
-            Text("Mappings are saved locally. Protected applications use the privileged helper configured in Settings.")
-                .font(.footnote)
+            Text("MacICNS supports applications that your user account can modify safely.")
+                .font(.callout)
                 .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+                TextField("Search Applications", text: $searchText)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 7))
+
+            Group {
+                if isLoading {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                        Text("Loading applications…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if visibleEntries.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(visibleEntries) { entry in
+                                catalogRow(entry)
+                                if entry.id != visibleEntries.last?.id {
+                                    Divider().padding(.leading, 52)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(height: 280)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(.quaternary, lineWidth: 1)
+            }
+
+            HStack {
+                Button("Browse…") { chooseApplication() }
+                Spacer()
+                if let applicationURL {
+                    Label(
+                        applicationURL.deletingPathExtension().lastPathComponent,
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
+            }
+
+            if let validationMessage {
+                Text(validationMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if applicationURL != nil {
+                selectionRow(
+                    title: "ICNS File",
+                    selection: iconURL?.lastPathComponent,
+                    actionTitle: "Choose ICNS File"
+                ) {
+                    chooseIcon()
+                }
+            }
 
             HStack {
                 Spacer()
@@ -274,7 +345,77 @@ private struct MappingEditorView: View {
             }
         }
         .padding(24)
-        .frame(width: 460)
+        .frame(width: 620)
+        .task {
+            let loader = catalogLoader
+            catalog = await Task.detached(priority: .userInitiated) {
+                loader.load()
+            }.value
+            isLoading = false
+        }
+    }
+
+    private var visibleEntries: [ApplicationCatalogEntry] {
+        catalog.entries(searchText: searchText)
+    }
+
+    @ViewBuilder
+    private func catalogRow(_ entry: ApplicationCatalogEntry) -> some View {
+        let row = HStack(spacing: 12) {
+            Image(nsImage: iconProvider.originalIcon(for: entry.url))
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.displayName)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                if entry.eligibility != .compatible {
+                    Text("macOS does not allow this app's icon to be changed safely.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            Text(entry.eligibility.catalogLabel)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(entry.eligibility == .compatible ? .secondary : .tertiary)
+
+            if applicationURL == entry.url {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 52)
+        .contentShape(Rectangle())
+        .background(
+            applicationURL == entry.url ? Color.accentColor.opacity(0.12) : Color.clear
+        )
+
+        if entry.eligibility == .compatible {
+            Button {
+                applicationURL = entry.url
+                validationMessage = nil
+            } label: {
+                row
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(entry.displayName), Compatible")
+        } else {
+            row
+                .opacity(0.72)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(entry.displayName), \(entry.eligibility.catalogLabel)")
+        }
     }
 
     private func chooseApplication() {
@@ -291,7 +432,18 @@ private struct MappingEditorView: View {
             guard response == .OK,
                   let url = panel.url,
                   FileSelectionValidator.isApplication(url) else { return }
-            applicationURL = url
+            guard let entry = catalogLoader.entry(for: url) else {
+                applicationURL = nil
+                validationMessage = "The selected item is not a valid application."
+                return
+            }
+            guard entry.eligibility == .compatible else {
+                applicationURL = nil
+                validationMessage = "\(entry.displayName) is \(entry.eligibility.catalogLabel.lowercased()). macOS does not allow this app's icon to be changed safely."
+                return
+            }
+            applicationURL = entry.url
+            validationMessage = nil
         }
     }
 
@@ -330,6 +482,17 @@ private struct MappingEditorView: View {
             }
             Spacer()
             Button(actionTitle, action: action)
+        }
+    }
+}
+
+private extension ApplicationEligibility {
+    var catalogLabel: String {
+        switch self {
+        case .compatible: "Compatible"
+        case .protected: "Protected"
+        case .systemApplication: "System App"
+        case .missing, .invalid: "Unavailable"
         }
     }
 }
