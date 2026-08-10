@@ -3,6 +3,8 @@ import ServiceManagement
 
 @MainActor
 final class HelperInstallationService {
+    private static let defaultRegistrationRetryLimit = 120
+
     enum Status: Equatable {
         case notInstalled
         case installed
@@ -59,7 +61,7 @@ final class HelperInstallationService {
             }
             NSWorkspace.shared.open(settingsURL)
         }
-        registrationRetryLimit = 40
+        registrationRetryLimit = Self.defaultRegistrationRetryLimit
         registrationRetryDelay = {
             try await Task.sleep(for: .milliseconds(250))
         }
@@ -70,7 +72,7 @@ final class HelperInstallationService {
         register: @escaping () throws -> Void,
         unregister: @escaping () async throws -> Void,
         openSettings: @escaping () -> Void,
-        registrationRetryLimit: Int = 40,
+        registrationRetryLimit: Int = HelperInstallationService.defaultRegistrationRetryLimit,
         registrationRetryDelay: @escaping () async throws -> Void = {
             try await Task.sleep(for: .milliseconds(250))
         }

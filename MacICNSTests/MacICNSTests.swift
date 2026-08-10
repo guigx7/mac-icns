@@ -79,6 +79,27 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
+    func testHelperUpdateDefaultRetryWindowOutlastsDelayedServiceRelease() async throws {
+        var attempts = 0
+        let service = HelperInstallationService(
+            statusProvider: { .notInstalled },
+            register: {
+                attempts += 1
+                if attempts <= 60 {
+                    throw NSError(domain: "SMAppServiceErrorDomain", code: 1)
+                }
+            },
+            unregister: {},
+            openSettings: {},
+            registrationRetryDelay: {}
+        )
+
+        try await service.update()
+
+        XCTAssertEqual(attempts, 61)
+    }
+
+    @MainActor
     func testHelperUpdateDoesNotRetryUnrelatedRegistrationFailure() async {
         var attempts = 0
         var delays = 0
