@@ -482,6 +482,76 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
+    func testLaunchSilentlyPersistsOnlySupportedMappings() {
+        let compatibleURL = URL(filePath: "/Applications/Compatible.app")
+        let protectedURL = URL(filePath: "/Applications/Protected.app")
+        let missingURL = URL(filePath: "/Applications/Missing.app")
+        var compatible = IconMapping(
+            applicationURL: compatibleURL,
+            bundleIdentifier: nil,
+            iconURL: URL(filePath: "/tmp/Compatible.icns")
+        )
+        var protected = IconMapping(
+            applicationURL: protectedURL,
+            bundleIdentifier: nil,
+            iconURL: URL(filePath: "/tmp/Protected.icns")
+        )
+        var missing = IconMapping(
+            applicationURL: missingURL,
+            bundleIdentifier: nil,
+            iconURL: URL(filePath: "/tmp/Missing.icns")
+        )
+        compatible.isEnabled = false
+        protected.isEnabled = false
+        missing.isEnabled = false
+        let repository = MemoryMappingRepository([compatible, protected, missing])
+        let pruner = MappingEligibilityPruner(
+            eligibility: AppStateEligibilityStub(values: [
+                compatibleURL: .compatible,
+                protectedURL: .protected,
+                missingURL: .missing,
+            ]),
+            locator: AppStateLocatorStub(values: [:])
+        )
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: LifecycleApplier()),
+            eligibilityPruner: pruner
+        )
+
+        appState.loadMappings()
+
+        XCTAssertEqual(appState.mappings.map(\.id), [compatible.id, missing.id])
+        XCTAssertEqual(repository.savedMappings.map(\.id), [compatible.id, missing.id])
+        XCTAssertEqual(repository.saveCount, 1)
+        XCTAssertNil(appState.operationError)
+    }
+
+    @MainActor
+    func testAddMappingRejectsUnsupportedStaleSelection() async {
+        let protectedURL = URL(filePath: "/Applications/Protected.app")
+        let repository = MemoryMappingRepository([])
+        let pruner = MappingEligibilityPruner(
+            eligibility: AppStateEligibilityStub(values: [protectedURL: .protected]),
+            locator: AppStateLocatorStub(values: [:])
+        )
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: LifecycleApplier()),
+            eligibilityPruner: pruner
+        )
+
+        await appState.addMapping(
+            applicationURL: protectedURL,
+            iconURL: URL(filePath: "/tmp/Protected.icns")
+        )
+
+        XCTAssertTrue(appState.mappings.isEmpty)
+        XCTAssertEqual(repository.saveCount, 0)
+        XCTAssertNil(appState.operationError)
+    }
+
+    @MainActor
     func testDeletingRestoresThenPersistsRemoval() async throws {
         let fixture = try MappingFixture()
         defer { fixture.remove() }
@@ -646,9 +716,26 @@ private struct EmptyMappingRepository: MappingRepository {
     func save(_ mappings: [IconMapping]) throws {}
 }
 
+private struct AppStateEligibilityStub: ApplicationEligibilityChecking {
+    let values: [URL: ApplicationEligibility]
+
+    func eligibility(for applicationURL: URL) -> ApplicationEligibility {
+        values[applicationURL] ?? .invalid
+    }
+}
+
+private struct AppStateLocatorStub: ApplicationLocating {
+    let values: [String: URL]
+
+    func resolve(_ bundleIdentifier: String) -> URL? {
+        values[bundleIdentifier]
+    }
+}
+
 private final class MemoryMappingRepository: MappingRepository, @unchecked Sendable {
     private var loadedMappings: [IconMapping]
     private(set) var savedMappings: [IconMapping]
+    private(set) var saveCount = 0
 
     init(_ mappings: [IconMapping]) {
         loadedMappings = mappings
@@ -658,6 +745,7 @@ private final class MemoryMappingRepository: MappingRepository, @unchecked Senda
     func load() throws -> [IconMapping] { loadedMappings }
 
     func save(_ mappings: [IconMapping]) throws {
+        saveCount += 1
         savedMappings = mappings
         loadedMappings = mappings
     }

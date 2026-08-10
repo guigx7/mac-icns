@@ -2,9 +2,7 @@ import Foundation
 
 struct RepairFailureDetails: Equatable, Sendable {
     enum Category: Equatable, Sendable {
-        case helperUnavailable
-        case unsafeTarget
-        case metadataWrite
+        case permission
         case other
     }
 
@@ -16,12 +14,8 @@ struct RepairFailureDetails: Equatable, Sendable {
 
     var userMessage: String {
         switch category {
-        case .helperUnavailable:
-            "The privileged helper is unavailable. Update or approve it in Settings."
-        case .unsafeTarget:
-            "The application path is not safe for privileged icon changes."
-        case .metadataWrite:
-            "The helper reached the application but could not write Finder icon metadata."
+        case .permission:
+            "The application is no longer writable."
         case .other:
             "The icon operation failed. Review Settings and try again."
         }
@@ -272,18 +266,7 @@ actor RepairCoordinator {
 
     private func failureCategory(error: Error, nsError: NSError) -> RepairFailureDetails.Category {
         if isPermissionFailure(error) {
-            return .helperUnavailable
-        }
-        if error is PrivilegedPathValidator.ValidationError
-            || nsError.domain.contains("PrivilegedPathValidator") {
-            return .unsafeTarget
-        }
-        if error is StableApplicationIconWriter.WriteError
-            || nsError.domain.contains("StableApplicationIconWriter") {
-            return .metadataWrite
-        }
-        if nsError.domain == "com.guigx.macicns.helper" {
-            return .metadataWrite
+            return .permission
         }
         return .other
     }

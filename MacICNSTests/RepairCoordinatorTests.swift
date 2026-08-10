@@ -216,6 +216,9 @@ final class RepairCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(repaired.status, .needsPermission)
         XCTAssertNil(repaired.lastSuccessAt)
+        let details = await coordinator.failureDetails(for: mapping.id)
+        XCTAssertEqual(details?.category, .permission)
+        XCTAssertEqual(details?.userMessage, "The application is no longer writable.")
     }
 
     func testRepairMarksNonPermissionFailureAsFailed() async throws {

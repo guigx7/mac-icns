@@ -14,6 +14,7 @@ final class AppState: ObservableObject {
 
     private let repository: any MappingRepository
     private let repairCoordinator: RepairCoordinator
+    private let eligibilityPruner: MappingEligibilityPruner
     private let helperInstallationService: HelperInstallationService
     private let diagnosticLogger: DiagnosticLogger
     private var hasLaunched = false
@@ -29,12 +30,14 @@ final class AppState: ObservableObject {
 
     init(
         repository: any MappingRepository = JSONMappingRepository(),
-        repairCoordinator: RepairCoordinator = RepairCoordinator(applier: IconApplierRouter()),
+        repairCoordinator: RepairCoordinator = RepairCoordinator(applier: DirectIconApplier()),
+        eligibilityPruner: MappingEligibilityPruner = MappingEligibilityPruner(),
         helperInstallationService: HelperInstallationService = HelperInstallationService(),
         diagnosticLogger: DiagnosticLogger = DiagnosticLogger()
     ) {
         self.repository = repository
         self.repairCoordinator = repairCoordinator
+        self.eligibilityPruner = eligibilityPruner
         self.helperInstallationService = helperInstallationService
         self.diagnosticLogger = diagnosticLogger
         helperStatus = helperInstallationService.initialOperationalStatus
@@ -53,7 +56,11 @@ final class AppState: ObservableObject {
 
     func loadMappings() {
         do {
-            mappings = try repository.load()
+            let loadedMappings = try repository.load()
+            mappings = eligibilityPruner.prune(loadedMappings)
+            if mappings != loadedMappings {
+                saveMappings()
+            }
             mappingFailureMessages = [:]
             mappingRevision += 1
             let revision = mappingRevision
@@ -74,6 +81,10 @@ final class AppState: ObservableObject {
             bundleIdentifier: Bundle(url: applicationURL)?.bundleIdentifier,
             iconURL: iconURL
         )
+        guard eligibilityPruner.acceptsNewMapping(mapping) else {
+            recordDiagnostic("Ignored an incompatible application mapping.")
+            return
+        }
         mappings.append(mapping)
         mappingRevision += 1
         saveMappings()
@@ -351,6 +362,10 @@ final class AppState: ObservableObject {
     }
 
     private func saveMappings() {
+        let prunedMappings = eligibilityPruner.prune(mappings)
+        let retainedIDs = Set(prunedMappings.map(\.id))
+        mappings = prunedMappings
+        mappingFailureMessages = mappingFailureMessages.filter { retainedIDs.contains($0.key) }
         do {
             try repository.save(mappings)
             persistenceError = nil
