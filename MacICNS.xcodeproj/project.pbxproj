@@ -534,6 +534,8 @@
 		A100000000000000000000C0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				AD_HOC_CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = DHAFYHA4FG;
 				ENABLE_TESTABILITY = YES;
@@ -550,6 +552,8 @@
 		A100000000000000000000C1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				AD_HOC_CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = DHAFYHA4FG;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -565,6 +569,8 @@
 		A100000000000000000000D0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				AD_HOC_CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = DHAFYHA4FG;
@@ -581,6 +587,8 @@
 		A100000000000000000000D1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				AD_HOC_CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = DHAFYHA4FG;
