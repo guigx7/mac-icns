@@ -117,6 +117,20 @@ final class PrivilegedIconWriterTests: XCTestCase {
         XCTAssertEqual(finderFlags(descriptor: descriptor) & 0x0400, 0x0400)
     }
 
+    func testSystemCallErrorProvidesStableXPCDiagnostics() {
+        let error = StableApplicationIconWriter.WriteError.systemCall(
+            operation: "create target icon metadata",
+            code: EACCES
+        ).xpcError
+
+        XCTAssertEqual(error.domain, "com.guigx.macicns.helper.icon-write")
+        XCTAssertEqual(error.code, Int(EACCES))
+        XCTAssertEqual(
+            error.localizedDescription,
+            "Finder icon metadata operation create target icon metadata failed (POSIX 13: Permission denied)."
+        )
+    }
+
     func testResetRemovesIconAndClearsOnlyCustomIconFlag() throws {
         let applicationURL = try makeApplication(named: "Reset.app")
         let descriptor = try PrivilegedPathValidator.openApplicationDirectory(

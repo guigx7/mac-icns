@@ -42,7 +42,11 @@ final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCPro
             try iconOperation.apply(request: validatedRequest)
             reply(nil)
         } catch {
-            reply(error as NSError)
+            if let writeError = error as? StableApplicationIconWriter.WriteError {
+                reply(writeError.xpcError)
+            } else {
+                reply(error as NSError)
+            }
         }
     }
 
@@ -56,7 +60,11 @@ final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCPro
             try iconOperation.reset(request: validatedRequest)
             reply(nil)
         } catch {
-            reply(error as NSError)
+            if let writeError = error as? StableApplicationIconWriter.WriteError {
+                reply(writeError.xpcError)
+            } else {
+                reply(error as NSError)
+            }
         }
     }
 

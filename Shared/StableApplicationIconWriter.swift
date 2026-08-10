@@ -50,6 +50,28 @@ struct StableApplicationIconWriter {
                 "Finder icon metadata operation \(operation) failed (POSIX \(code))."
             }
         }
+
+        var xpcError: NSError {
+            switch self {
+            case let .systemCall(operation, code):
+                let reason = String(cString: strerror(code))
+                return NSError(
+                    domain: "com.guigx.macicns.helper.icon-write",
+                    code: Int(code),
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Finder icon metadata operation \(operation) failed "
+                            + "(POSIX \(code): \(reason))."
+                    ]
+                )
+            default:
+                return NSError(
+                    domain: "com.guigx.macicns.helper.icon-write",
+                    code: 0,
+                    userInfo: [NSLocalizedDescriptionKey: errorDescription ?? "The icon could not be written."]
+                )
+            }
+        }
     }
 
     private static let iconFileName = "Icon\r"
@@ -144,7 +166,10 @@ struct StableApplicationIconWriter {
             mode_t(0o600)
         )
         guard targetIconDescriptor >= 0 else {
-            throw WriteError.unsafeIconMetadata
+            if errno == ELOOP {
+                throw WriteError.unsafeIconMetadata
+            }
+            throw posixError("create target icon metadata")
         }
         defer { close(targetIconDescriptor) }
         try requireSafeTargetIcon(
