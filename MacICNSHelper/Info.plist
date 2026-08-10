@@ -8,5 +8,5 @@
     <key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key><string>TOOL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
-    <key>CFBundleVersion</key><string>4</string>
+    <key>CFBundleVersion</key><string>5</string>
 </dict></plist>

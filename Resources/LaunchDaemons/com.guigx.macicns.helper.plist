@@ -2,7 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>com.guigx.macicns.helper</string>
-  <key>AssociatedBundleIdentifiers</key><array><string>com.guigx.macicns</string></array>
   <key>BundleProgram</key><string>Contents/Library/LaunchServices/com.guigx.macicns.helper</string>
   <key>MachServices</key><dict><key>com.guigx.macicns.helper</key><true/></dict>
   <key>RunAtLoad</key><false/>

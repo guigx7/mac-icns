@@ -13,7 +13,7 @@ final class MacICNSTests: XCTestCase {
         )
     }
 
-    func testBundledHelperDeclaresApplicationAsResponsibleCode() throws {
+    func testSMAppServiceDaemonDoesNotDeclareLegacyApplicationAssociation() throws {
         let daemonURL = Bundle.main.bundleURL.appending(
             path: "Contents/Library/LaunchDaemons/com.guigx.macicns.helper.plist"
         )
@@ -22,10 +22,7 @@ final class MacICNSTests: XCTestCase {
             PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
         )
 
-        XCTAssertEqual(
-            propertyList["AssociatedBundleIdentifiers"] as? [String],
-            ["com.guigx.macicns"]
-        )
+        XCTAssertNil(propertyList["AssociatedBundleIdentifiers"])
     }
 
     func testFileSelectionValidatorAcceptsOnlyExpectedExtensions() {
