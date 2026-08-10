@@ -184,8 +184,7 @@ actor RepairCoordinator {
             let appFingerprint = try fingerprinting.fingerprint(of: applicationURL)
             let iconFingerprint = try fingerprinting.fingerprint(of: repairedMapping.iconURL)
 
-            guard reason == .helperUpdated
-                || appFingerprint != repairedMapping.appFingerprint
+            guard appFingerprint != repairedMapping.appFingerprint
                 || iconFingerprint != repairedMapping.iconFingerprint else {
                 repairedMapping.status = .upToDate
                 failureDetailsByID[mapping.id] = nil

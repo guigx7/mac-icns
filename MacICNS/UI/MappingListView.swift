@@ -159,12 +159,7 @@ private struct MappingRowView: View {
             }
 
             HStack(spacing: 10) {
-                if mapping.status == .needsPermission, mapping.isEnabled {
-                    SettingsLink {
-                        Text("Set Up Helper")
-                    }
-                    .controlSize(.small)
-                } else if mapping.isEnabled {
+                if mapping.isEnabled {
                     Button(action: apply) {
                         Image(systemName: "arrow.clockwise")
                     }

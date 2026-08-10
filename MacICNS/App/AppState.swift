@@ -5,9 +5,6 @@ import Foundation
 final class AppState: ObservableObject {
     @Published private(set) var mappings: [IconMapping] = []
     @Published private(set) var persistenceError: String?
-    @Published private(set) var helperStatus: HelperInstallationService.OperationalStatus
-    @Published private(set) var helperError: String?
-    @Published private(set) var helperIsUpdating = false
     @Published private(set) var operationError: String?
     @Published private(set) var busyMappingIDs: Set<UUID> = []
     @Published private(set) var mappingFailureMessages: [UUID: String] = [:]
@@ -15,7 +12,6 @@ final class AppState: ObservableObject {
     private let repository: any MappingRepository
     private let repairCoordinator: RepairCoordinator
     private let eligibilityPruner: MappingEligibilityPruner
-    private let helperInstallationService: HelperInstallationService
     private let diagnosticLogger: DiagnosticLogger
     private var hasLaunched = false
     private var mappingRevision = 0
@@ -32,15 +28,12 @@ final class AppState: ObservableObject {
         repository: any MappingRepository = JSONMappingRepository(),
         repairCoordinator: RepairCoordinator = RepairCoordinator(applier: DirectIconApplier()),
         eligibilityPruner: MappingEligibilityPruner = MappingEligibilityPruner(),
-        helperInstallationService: HelperInstallationService = HelperInstallationService(),
         diagnosticLogger: DiagnosticLogger = DiagnosticLogger()
     ) {
         self.repository = repository
         self.repairCoordinator = repairCoordinator
         self.eligibilityPruner = eligibilityPruner
-        self.helperInstallationService = helperInstallationService
         self.diagnosticLogger = diagnosticLogger
-        helperStatus = helperInstallationService.initialOperationalStatus
     }
 
     func launch() {
@@ -48,9 +41,6 @@ final class AppState: ObservableObject {
             return
         }
         hasLaunched = true
-        Task { [weak self] in
-            await self?.refreshHelperStatus()
-        }
         loadMappings()
     }
 
@@ -251,93 +241,6 @@ final class AppState: ObservableObject {
         persistenceError = nil
     }
 
-    func refreshHelperStatus() async {
-        let previousStatus = helperStatus
-        helperStatus = await helperInstallationService.operationalStatus()
-        helperError = nil
-        if helperStatus == .requiresApproval {
-            recordDiagnostic("Privileged helper requires approval.")
-        }
-        if previousStatus != .installed, helperStatus == .installed {
-            recordDiagnostic("Privileged helper became available; refreshing icons.")
-            await refreshAll(
-                reason: .helperUpdated,
-                diagnosticMessage: "Reapplying icons after helper became available."
-            )
-        }
-    }
-
-    func installHelper() async {
-        guard !helperIsUpdating else { return }
-        helperIsUpdating = true
-        helperError = nil
-        defer { helperIsUpdating = false }
-
-        do {
-            try await helperInstallationService.installAndWaitUntilReady()
-            helperStatus = await helperInstallationService.operationalStatus()
-            guard helperStatus == .installed else {
-                helperError = "The helper was registered but stopped responding. Please try again."
-                recordDiagnostic("Privileged helper stopped responding after installation.")
-                return
-            }
-            helperError = nil
-            recordDiagnostic("Privileged helper was installed successfully.")
-            await refreshAll(
-                reason: .helperUpdated,
-                diagnosticMessage: "Reapplying enabled icons after helper installation."
-            )
-        } catch HelperInstallationService.UpdateError.requiresApproval {
-            helperStatus = .requiresApproval
-            helperError = "The helper needs approval. Enable MacICNS in Login Items & Extensions."
-            recordDiagnostic("Privileged helper installation requires approval in Login Items & Extensions.")
-            helperInstallationService.openLoginItemsAndExtensions()
-        } catch {
-            helperStatus = await helperInstallationService.operationalStatus()
-            helperError = "Could not install the helper: \(error.localizedDescription)"
-            recordDiagnostic("Could not install privileged helper: \(error.localizedDescription)")
-        }
-    }
-
-    func updateHelper() async {
-        guard !helperIsUpdating else { return }
-        helperIsUpdating = true
-        helperError = nil
-        defer { helperIsUpdating = false }
-
-        do {
-            try await helperInstallationService.update()
-            helperStatus = await helperInstallationService.operationalStatus()
-            guard helperStatus == .installed else {
-                helperError = "The helper was updated but stopped responding. Please try again."
-                recordDiagnostic("Privileged helper stopped responding after update.")
-                return
-            }
-            recordDiagnostic("Privileged helper was updated successfully.")
-            await refreshAll(
-                reason: .helperUpdated,
-                diagnosticMessage: "Reapplying enabled icons after helper update."
-            )
-        } catch HelperInstallationService.UpdateError.requiresApproval {
-            helperStatus = .requiresApproval
-            helperError = "The helper needs approval. Enable MacICNS in Login Items & Extensions."
-            recordDiagnostic("Privileged helper update requires approval in Login Items & Extensions.")
-            helperInstallationService.openLoginItemsAndExtensions()
-        } catch {
-            helperStatus = await helperInstallationService.operationalStatus()
-            helperError = "Could not update the helper: \(error.localizedDescription)"
-            recordDiagnostic("Could not update privileged helper: \(sanitizedDescription(error))")
-        }
-    }
-
-    func openHelperApprovalSettings() {
-        helperInstallationService.openLoginItemsAndExtensions()
-    }
-
-    func openAppManagementSettings() {
-        helperInstallationService.openAppManagement()
-    }
-
     private func replace(_ mapping: IconMapping) {
         guard let index = mappings.firstIndex(where: { $0.id == mapping.id }) else {
             return
@@ -393,11 +296,4 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func sanitizedDescription(_ error: Error) -> String {
-        let nsError = error as NSError
-        let description = nsError.localizedDescription
-            .split(whereSeparator: { $0.isWhitespace })
-            .joined(separator: " ")
-        return "domain=\(String(nsError.domain.prefix(200))) code=\(nsError.code) description=\(String(description.prefix(300)))"
-    }
 }

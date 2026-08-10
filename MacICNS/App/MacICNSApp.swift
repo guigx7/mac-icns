@@ -29,7 +29,7 @@ struct MacICNSApp: App {
         }
 
         Settings {
-            SettingsView(appState: appState, loginItemService: loginItemService)
+            SettingsView(loginItemService: loginItemService)
         }
 
         MenuBarExtra("MacICNS", systemImage: "square.grid.2x2") {
@@ -51,7 +51,6 @@ struct MacICNSApp: App {
 }
 
 private struct SettingsView: View {
-    @ObservedObject var appState: AppState
     @ObservedObject var loginItemService: LoginItemService
 
     var body: some View {
@@ -67,79 +66,8 @@ private struct SettingsView: View {
                 }
             }
 
-            Section("Privileged Helper") {
-                Text(helperStatusMessage)
-                if let actionTitle = HelperSettingsPresentation.primaryActionTitle(
-                    for: appState.helperStatus
-                ) {
-                    Button(actionTitle) {
-                        if appState.helperStatus == .notInstalled {
-                            Task { await appState.installHelper() }
-                        } else {
-                            Task { await appState.updateHelper() }
-                        }
-                    }
-                    .disabled(appState.helperIsUpdating)
-                }
-                if appState.helperIsUpdating {
-                    ProgressView("Updating helper…")
-                        .controlSize(.small)
-                }
-                if appState.helperStatus == .requiresApproval {
-                    Button("Open Login Items Settings") {
-                        appState.openHelperApprovalSettings()
-                    }
-                }
-                Button("Open App Management Settings") {
-                    appState.openAppManagementSettings()
-                }
-                Text("Enable MacICNS there so its helper can update protected applications.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let helperError = appState.helperError {
-                    Text(helperError)
-                        .foregroundStyle(.red)
-                }
-                Button("Refresh Helper Status") {
-                    Task { await appState.refreshHelperStatus() }
-                }
-                .disabled(appState.helperIsUpdating)
-            }
         }
         .padding()
         .frame(width: 380)
-        .onAppear {
-            Task { await appState.refreshHelperStatus() }
-        }
-    }
-
-    private var helperStatusMessage: String {
-        switch appState.helperStatus {
-        case .installed:
-            "Helper is installed."
-        case .requiresApproval:
-            "Helper needs approval in Login Items & Extensions."
-        case .notInstalled:
-            "Helper is not installed."
-        case .updateRequired:
-            "Helper update required."
-        case .unavailable:
-            "Helper is registered but unavailable."
-        }
-    }
-}
-
-enum HelperSettingsPresentation {
-    static func primaryActionTitle(
-        for status: HelperInstallationService.OperationalStatus
-    ) -> String? {
-        switch status {
-        case .installed, .updateRequired, .unavailable:
-            "Update Helper"
-        case .notInstalled:
-            "Install Helper"
-        case .requiresApproval:
-            nil
-        }
     }
 }

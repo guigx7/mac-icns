@@ -241,7 +241,7 @@ final class RepairCoordinatorTests: XCTestCase {
         mapping.appFingerprint = "old-app"
         mapping.iconFingerprint = "old-icon"
         let failure = NSError(
-            domain: "com.guigx.macicns.helper",
+            domain: "com.guigx.macicns.icon-operation",
             code: 42,
             userInfo: [
                 NSLocalizedDescriptionKey: "Could not write \(applicationURL.path) using \(iconURL.path)\nmetadata",
@@ -256,7 +256,7 @@ final class RepairCoordinatorTests: XCTestCase {
         _ = await coordinator.repair(mapping, reason: .manual)
         let details = await coordinator.failureDetails(for: mapping.id)
 
-        XCTAssertEqual(details?.domain, "com.guigx.macicns.helper")
+        XCTAssertEqual(details?.domain, "com.guigx.macicns.icon-operation")
         XCTAssertEqual(details?.code, 42)
         XCTAssertFalse(details?.description.contains(applicationURL.path) == true)
         XCTAssertFalse(details?.description.contains(iconURL.path) == true)
