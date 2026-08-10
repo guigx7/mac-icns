@@ -6,6 +6,13 @@ final class MacICNSTests: XCTestCase {
         XCTAssertEqual(Bundle.main.bundleIdentifier, "com.guigx.macicns")
     }
 
+    func testApplicationDeclaresAppManagementUsageDescription() {
+        XCTAssertEqual(
+            Bundle.main.object(forInfoDictionaryKey: "NSAppBundlesUsageDescription") as? String,
+            "MacICNS needs permission to apply custom icons to applications you select."
+        )
+    }
+
     func testFileSelectionValidatorAcceptsOnlyExpectedExtensions() {
         XCTAssertTrue(FileSelectionValidator.isApplication(URL(filePath: "/Applications/Example.app")))
         XCTAssertFalse(FileSelectionValidator.isApplication(URL(filePath: "/Applications/Example.icns")))
