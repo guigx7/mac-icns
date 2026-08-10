@@ -9,6 +9,17 @@ final class HelperInstallationService {
         case requiresApproval
     }
 
+    enum UpdateError: LocalizedError {
+        case removalTimedOut
+
+        var errorDescription: String? {
+            switch self {
+            case .removalTimedOut:
+                "macOS did not finish removing the previous helper. Please try again."
+            }
+        }
+    }
+
     private let statusProvider: () -> Status
     private let registerAction: () throws -> Void
     private let unregisterAction: () async throws -> Void
@@ -80,7 +91,20 @@ final class HelperInstallationService {
                 throw error
             }
         }
+        try await waitUntilRemoved()
         try registerAction()
+    }
+
+    private func waitUntilRemoved() async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(10))
+
+        while statusProvider() != .notInstalled {
+            guard clock.now < deadline else {
+                throw UpdateError.removalTimedOut
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
     }
 
     func openLoginItemsAndExtensions() {

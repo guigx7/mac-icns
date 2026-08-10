@@ -51,6 +51,31 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
+    func testHelperUpdateWaitsUntilServiceManagementReportsRemoval() async throws {
+        var statusReads = 0
+        var didRegister = false
+        let service = HelperInstallationService(
+            statusProvider: {
+                statusReads += 1
+                return statusReads >= 3 ? .notInstalled : .installed
+            },
+            register: {
+                guard statusReads >= 3 else {
+                    throw HelperUpdateTestError.serviceStillRegistered
+                }
+                didRegister = true
+            },
+            unregister: {},
+            openSettings: {}
+        )
+
+        try await service.update()
+
+        XCTAssertTrue(didRegister)
+        XCTAssertGreaterThanOrEqual(statusReads, 3)
+    }
+
+    @MainActor
     func testHelperUpdateFailureRemainsVisible() async {
         let service = HelperInstallationService(
             statusProvider: { .installed },
@@ -321,6 +346,7 @@ private actor UpdateRecordingApplier: IconApplying {
 }
 
 private enum HelperUpdateTestError: Error {
+    case serviceStillRegistered
     case unregisterFailed
 }
 
