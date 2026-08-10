@@ -276,6 +276,11 @@ final class AppState: ObservableObject {
                 reason: .helperUpdated,
                 diagnosticMessage: "Reapplying enabled icons after helper installation."
             )
+        } catch HelperInstallationService.UpdateError.requiresApproval {
+            helperStatus = .requiresApproval
+            helperError = "The helper needs approval. Enable MacICNS in Login Items & Extensions."
+            recordDiagnostic("Privileged helper installation requires approval in Login Items & Extensions.")
+            helperInstallationService.openLoginItemsAndExtensions()
         } catch {
             helperStatus = await helperInstallationService.operationalStatus()
             helperError = "Could not install the helper: \(error.localizedDescription)"
@@ -302,6 +307,11 @@ final class AppState: ObservableObject {
                 reason: .helperUpdated,
                 diagnosticMessage: "Reapplying enabled icons after helper update."
             )
+        } catch HelperInstallationService.UpdateError.requiresApproval {
+            helperStatus = .requiresApproval
+            helperError = "The helper needs approval. Enable MacICNS in Login Items & Extensions."
+            recordDiagnostic("Privileged helper update requires approval in Login Items & Extensions.")
+            helperInstallationService.openLoginItemsAndExtensions()
         } catch {
             helperStatus = await helperInstallationService.operationalStatus()
             helperError = "Could not update the helper: \(error.localizedDescription)"

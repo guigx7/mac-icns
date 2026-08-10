@@ -21,13 +21,13 @@ final class HelperInstallationService {
     }
 
     enum UpdateError: LocalizedError {
-        case registrationTimedOut
+        case requiresApproval
         case helperDidNotBecomeReady
 
         var errorDescription: String? {
             switch self {
-            case .registrationTimedOut:
-                "macOS did not finish updating the helper. Please try again."
+            case .requiresApproval:
+                "The helper needs approval in Login Items & Extensions."
             case .helperDidNotBecomeReady:
                 "The registered helper did not become ready. Please update it and try again."
             }
@@ -70,12 +70,7 @@ final class HelperInstallationService {
             }
         }
         openSettingsAction = {
-            guard let settingsURL = URL(
-                string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
-            ) else {
-                return
-            }
-            NSWorkspace.shared.open(settingsURL)
+            SMAppService.openSystemSettingsLoginItems()
         }
         openAppManagementSettingsAction = {
             guard let settingsURL = URL(
@@ -158,7 +153,11 @@ final class HelperInstallationService {
     }
 
     func installAndWaitUntilReady() async throws {
-        try registerAction()
+        do {
+            try registerAction()
+        } catch where isTransientRegistrationFailure(error) {
+            throw UpdateError.requiresApproval
+        }
         try await waitUntilReady()
     }
 
@@ -185,7 +184,7 @@ final class HelperInstallationService {
                 return
             } catch where isTransientRegistrationFailure(error) {
                 guard attempt < registrationRetryLimit else {
-                    throw UpdateError.registrationTimedOut
+                    throw UpdateError.requiresApproval
                 }
                 try await registrationRetryDelay()
             }

@@ -303,7 +303,7 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
-    func testHelperUpdateReportsRetryExhaustion() async {
+    func testHelperUpdateReportsApprovalRequirementAfterRetryExhaustion() async {
         var attempts = 0
         var delays = 0
         let service = HelperInstallationService(
@@ -321,13 +321,62 @@ final class MacICNSTests: XCTestCase {
         do {
             try await service.update()
             XCTFail("Expected registration retry exhaustion.")
-        } catch HelperInstallationService.UpdateError.registrationTimedOut {
+        } catch HelperInstallationService.UpdateError.requiresApproval {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
 
         XCTAssertEqual(attempts, 3)
         XCTAssertEqual(delays, 2)
+    }
+
+    @MainActor
+    func testDeniedHelperUpdateOpensLoginItemsApproval() async {
+        var status = HelperInstallationService.Status.installed
+        var openedSettings = false
+        let service = HelperInstallationService(
+            statusProvider: { status },
+            register: {
+                throw NSError(domain: "SMAppServiceErrorDomain", code: 1)
+            },
+            unregister: { status = .notInstalled },
+            openSettings: { openedSettings = true },
+            registrationRetryLimit: 1,
+            registrationRetryDelay: {}
+        )
+        let appState = AppState(
+            repository: EmptyMappingRepository(),
+            helperInstallationService: service
+        )
+
+        await appState.updateHelper()
+
+        XCTAssertEqual(appState.helperStatus, .requiresApproval)
+        XCTAssertTrue(openedSettings)
+        XCTAssertTrue(appState.helperError?.contains("approval") == true)
+    }
+
+    @MainActor
+    func testDeniedHelperInstallOpensLoginItemsApproval() async {
+        var openedSettings = false
+        let service = HelperInstallationService(
+            statusProvider: { .notInstalled },
+            register: {
+                throw NSError(domain: "SMAppServiceErrorDomain", code: 1)
+            },
+            unregister: {},
+            openSettings: { openedSettings = true }
+        )
+        let appState = AppState(
+            repository: EmptyMappingRepository(),
+            helperInstallationService: service
+        )
+
+        await appState.installHelper()
+
+        XCTAssertEqual(appState.helperStatus, .requiresApproval)
+        XCTAssertTrue(openedSettings)
+        XCTAssertTrue(appState.helperError?.contains("approval") == true)
     }
 
     @MainActor
