@@ -14,6 +14,10 @@ enum IconDataReader {
     static let maximumIconByteCount: off_t = 64 * 1024 * 1024
 
     static func image(at url: URL) throws -> NSImage {
+        try image(data: data(at: url))
+    }
+
+    static func data(at url: URL) throws -> Data {
         let descriptor = try openWithoutFollowingLinks(at: url.standardizedFileURL)
         defer { close(descriptor) }
 
@@ -30,6 +34,13 @@ enum IconDataReader {
 
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
         let data = try handle.read(upToCount: Int(maximumIconByteCount) + 1) ?? Data()
+        guard data.count <= Int(maximumIconByteCount) else {
+            throw ReadError.iconIsTooLarge
+        }
+        return data
+    }
+
+    static func image(data: Data) throws -> NSImage {
         guard data.count <= Int(maximumIconByteCount) else {
             throw ReadError.iconIsTooLarge
         }

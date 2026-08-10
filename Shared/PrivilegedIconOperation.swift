@@ -5,13 +5,13 @@ import Foundation
 struct PrivilegedIconOperation {
     private let requiredOwnerUID: uid_t
     private let writer: StableApplicationIconWriter
-    private let imageReader: (URL) throws -> NSImage
+    private let imageReader: (Data) throws -> NSImage
     private let notifyFileSystemChanged: (URL) -> Void
 
     init(
         requiredOwnerUID: uid_t = 0,
         writer: StableApplicationIconWriter = StableApplicationIconWriter(),
-        imageReader: @escaping (URL) throws -> NSImage = IconDataReader.image,
+        imageReader: @escaping (Data) throws -> NSImage = IconDataReader.image,
         notifyFileSystemChanged: @escaping (URL) -> Void = {
             NSWorkspace.shared.noteFileSystemChanged($0.path)
         }
@@ -29,7 +29,7 @@ struct PrivilegedIconOperation {
         )
         defer { close(applicationDescriptor) }
 
-        let image = try imageReader(request.iconURL)
+        let image = try imageReader(request.iconData)
         try writer.apply(image: image, toApplicationDescriptor: applicationDescriptor)
         notifyFileSystemChanged(request.applicationURL)
     }

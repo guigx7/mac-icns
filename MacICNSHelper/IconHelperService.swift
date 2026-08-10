@@ -34,10 +34,7 @@ final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCPro
 
     func applyIcon(_ request: IconApplyRequest, withReply reply: @escaping (NSError?) -> Void) {
         do {
-            let validatedRequest = try IconApplyRequest(
-                applicationURL: request.applicationURL,
-                iconURL: request.iconURL
-            )
+            let validatedRequest = try request.revalidated()
             guard NSXPCConnection.current() != nil else {
                 reply(helperError(code: 1, description: "The caller could not be identified."))
                 return

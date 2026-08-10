@@ -13,22 +13,42 @@ final class IconApplyRequest: NSObject, NSSecureCoding, @unchecked Sendable {
 
     let applicationURL: URL
     let iconURL: URL
+    let iconData: Data
 
-    init(applicationURL: URL, iconURL: URL) throws {
-        self.applicationURL = try Self.validateApplicationURL(applicationURL)
-        self.iconURL = try Self.validateIconURL(iconURL)
-        super.init()
+    convenience init(applicationURL: URL, iconURL: URL) throws {
+        let validatedApplicationURL = try Self.validateApplicationURL(applicationURL)
+        let validatedIconURL = try Self.validateIconURL(iconURL)
+        let iconData: Data
+        do {
+            iconData = try IconDataReader.data(at: validatedIconURL)
+        } catch {
+            throw ValidationError.iconMustBeAnExistingICNSFile
+        }
+        try Self.validateIconData(iconData)
+        self.init(
+            applicationURL: validatedApplicationURL,
+            iconURL: validatedIconURL,
+            iconData: iconData
+        )
     }
 
     required convenience init?(coder: NSCoder) {
         guard let applicationURL = coder.decodeObject(of: NSURL.self, forKey: "applicationURL") as URL?,
-              let iconURL = coder.decodeObject(of: NSURL.self, forKey: "iconURL") as URL?
+              let iconURL = coder.decodeObject(of: NSURL.self, forKey: "iconURL") as URL?,
+              let iconData = coder.decodeObject(of: NSData.self, forKey: "iconData") as Data?
         else {
             return nil
         }
 
         do {
-            try self.init(applicationURL: applicationURL, iconURL: iconURL)
+            let validatedApplicationURL = try Self.validateApplicationReference(applicationURL)
+            let validatedIconURL = try Self.validateIconReference(iconURL)
+            try Self.validateIconData(iconData)
+            self.init(
+                applicationURL: validatedApplicationURL,
+                iconURL: validatedIconURL,
+                iconData: iconData
+            )
         } catch {
             return nil
         }
@@ -37,6 +57,25 @@ final class IconApplyRequest: NSObject, NSSecureCoding, @unchecked Sendable {
     func encode(with coder: NSCoder) {
         coder.encode(applicationURL as NSURL, forKey: "applicationURL")
         coder.encode(iconURL as NSURL, forKey: "iconURL")
+        coder.encode(iconData as NSData, forKey: "iconData")
+    }
+
+    func revalidated() throws -> IconApplyRequest {
+        let validatedApplicationURL = try Self.validateApplicationReference(applicationURL)
+        let validatedIconURL = try Self.validateIconReference(iconURL)
+        try Self.validateIconData(iconData)
+        return IconApplyRequest(
+            applicationURL: validatedApplicationURL,
+            iconURL: validatedIconURL,
+            iconData: iconData
+        )
+    }
+
+    private init(applicationURL: URL, iconURL: URL, iconData: Data) {
+        self.applicationURL = applicationURL
+        self.iconURL = iconURL
+        self.iconData = iconData
+        super.init()
     }
 
     fileprivate static func validateApplicationURL(_ url: URL) throws -> URL {
@@ -49,15 +88,46 @@ final class IconApplyRequest: NSObject, NSSecureCoding, @unchecked Sendable {
         return standardizedURL
     }
 
+    private static func validateApplicationReference(_ url: URL) throws -> URL {
+        guard url.isFileURL else {
+            throw ValidationError.applicationMustBeAnExistingBundle
+        }
+        let standardizedURL = url.standardizedFileURL
+        guard standardizedURL.pathExtension.caseInsensitiveCompare("app") == .orderedSame,
+              isExistingDirectory(standardizedURL)
+        else {
+            throw ValidationError.applicationMustBeAnExistingBundle
+        }
+        return standardizedURL
+    }
+
     private static func validateIconURL(_ url: URL) throws -> URL {
         let standardizedURL = try validatedStandardFileURL(url)
         guard standardizedURL.pathExtension.caseInsensitiveCompare("icns") == .orderedSame,
-              isExistingRegularFile(standardizedURL),
-              NSImage(contentsOf: standardizedURL) != nil
+              isExistingRegularFile(standardizedURL)
         else {
             throw ValidationError.iconMustBeAnExistingICNSFile
         }
         return standardizedURL
+    }
+
+    private static func validateIconReference(_ url: URL) throws -> URL {
+        guard url.isFileURL else {
+            throw ValidationError.iconMustBeAnExistingICNSFile
+        }
+        let standardizedURL = url.standardizedFileURL
+        guard standardizedURL.pathExtension.caseInsensitiveCompare("icns") == .orderedSame else {
+            throw ValidationError.iconMustBeAnExistingICNSFile
+        }
+        return standardizedURL
+    }
+
+    private static func validateIconData(_ data: Data) throws {
+        guard data.count <= Int(IconDataReader.maximumIconByteCount),
+              NSImage(data: data) != nil
+        else {
+            throw ValidationError.iconMustBeAnExistingICNSFile
+        }
     }
 
     private static func validatedStandardFileURL(_ url: URL) throws -> URL {

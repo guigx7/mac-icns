@@ -38,6 +38,36 @@ final class IconApplyRequestTests: XCTestCase {
         XCTAssertNoThrow(try PrivilegedPathValidator.validate(applicationURL: protectedApplicationURL))
     }
 
+    func testSecureCodingRoundTripDoesNotReopenTheSourceIcon() throws {
+        let protectedApplicationURL = URL(
+            filePath: "/System/Applications/App Store.app",
+            directoryHint: .isDirectory
+        )
+        let detachedDirectory = try XCTUnwrap(
+            FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        )
+            .appending(path: "MacICNS-XPCRoundTrip-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: detachedDirectory) }
+        try FileManager.default.createDirectory(at: detachedDirectory, withIntermediateDirectories: true)
+        let detachedIconURL = detachedDirectory.appending(path: "Detached.icns")
+        try Data(contentsOf: systemIconURL).write(to: detachedIconURL)
+        let request = try IconApplyRequest(
+            applicationURL: protectedApplicationURL,
+            iconURL: detachedIconURL
+        )
+        let archivedRequest = try NSKeyedArchiver.archivedData(
+            withRootObject: request,
+            requiringSecureCoding: true
+        )
+        try FileManager.default.removeItem(at: detachedIconURL)
+
+        let decodedRequest = try XCTUnwrap(
+            NSKeyedUnarchiver.unarchivedObject(ofClass: IconApplyRequest.self, from: archivedRequest)
+        )
+
+        XCTAssertEqual(decodedRequest.applicationURL, protectedApplicationURL.standardizedFileURL)
+    }
+
     func testResetAcceptsAnExistingApplication() throws {
         let protectedApplicationURL = URL(
             filePath: "/System/Applications/App Store.app",

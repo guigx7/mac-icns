@@ -200,6 +200,24 @@ final class PrivilegedIconWriterTests: XCTestCase {
         if iconDescriptor >= 0 { close(iconDescriptor) }
     }
 
+    func testPrivilegedOperationUsesRequestBytesAfterSourceIconIsRemoved() throws {
+        let applicationURL = try makeApplication(named: "DetachedSourceApply.app")
+        let iconURL = temporaryDirectory.appending(path: "DetachedSource.icns")
+        try Data(contentsOf: systemIconURL).write(to: iconURL)
+        let request = try IconApplyRequest(applicationURL: applicationURL, iconURL: iconURL)
+        try FileManager.default.removeItem(at: iconURL)
+        let operation = PrivilegedIconOperation(requiredOwnerUID: getuid())
+
+        try operation.apply(request: request)
+
+        let descriptor = try PrivilegedPathValidator.openApplicationDirectory(
+            applicationURL: applicationURL,
+            requiredOwnerUID: getuid()
+        )
+        defer { close(descriptor) }
+        XCTAssertEqual(finderFlags(descriptor: descriptor) & 0x0400, 0x0400)
+    }
+
     func testPrivilegedOperationResetsValidatedRequest() throws {
         let applicationURL = try makeApplication(named: "OperationReset.app")
         let applyRequest = try IconApplyRequest(applicationURL: applicationURL, iconURL: systemIconURL)
