@@ -32,6 +32,10 @@ final class IconHelperService: NSObject, NSXPCListenerDelegate, IconHelperXPCPro
         return true
     }
 
+    func protocolVersion(withReply reply: @escaping (Int) -> Void) {
+        reply(HelperProtocolVersion.current)
+    }
+
     func applyIcon(_ request: IconApplyRequest, withReply reply: @escaping (NSError?) -> Void) {
         do {
             let validatedRequest = try request.revalidated()

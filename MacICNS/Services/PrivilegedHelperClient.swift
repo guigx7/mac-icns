@@ -9,6 +9,30 @@ struct PrivilegedHelperClient: IconApplying, Sendable {
         self.connectionFactory = connectionFactory
     }
 
+    func protocolVersion() async throws -> Int {
+        let connection = connectionFactory()
+        let completion = XPCCompletion<Int>()
+
+        return try await withCheckedThrowingContinuation { continuation in
+            completion.continuation = continuation
+            configure(connection, completion: completion)
+            connection.resume()
+
+            guard let helper = connection.remoteObjectProxyWithErrorHandler({ _ in
+                completion.finish(.failure(CocoaError(.fileReadUnknown)))
+            }) as? IconHelperXPCProtocol else {
+                completion.finish(.failure(CocoaError(.fileReadUnknown)))
+                connection.invalidate()
+                return
+            }
+
+            helper.protocolVersion { version in
+                completion.finish(.success(version))
+                connection.invalidate()
+            }
+        }
+    }
+
     func apply(applicationURL: URL, iconURL: URL) async throws {
         let request = try await MainActor.run {
             try IconApplyRequest(applicationURL: applicationURL, iconURL: iconURL)
@@ -18,18 +42,11 @@ struct PrivilegedHelperClient: IconApplying, Sendable {
 
     func apply(_ request: IconApplyRequest) async throws {
         let connection = connectionFactory()
-        let completion = XPCCompletion()
+        let completion = XPCCompletion<Void>()
 
         try await withCheckedThrowingContinuation { continuation in
             completion.continuation = continuation
-            connection.remoteObjectInterface = NSXPCInterface(with: IconHelperXPCProtocol.self)
-            connection.setCodeSigningRequirement(CodeSigningRequirements.helper)
-            connection.interruptionHandler = {
-                completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
-            }
-            connection.invalidationHandler = {
-                completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
-            }
+            configure(connection, completion: completion)
             connection.resume()
 
             guard let helper = connection.remoteObjectProxyWithErrorHandler({ _ in
@@ -57,18 +74,11 @@ struct PrivilegedHelperClient: IconApplying, Sendable {
 
     func reset(_ request: IconResetRequest) async throws {
         let connection = connectionFactory()
-        let completion = XPCCompletion()
+        let completion = XPCCompletion<Void>()
 
         try await withCheckedThrowingContinuation { continuation in
             completion.continuation = continuation
-            connection.remoteObjectInterface = NSXPCInterface(with: IconHelperXPCProtocol.self)
-            connection.setCodeSigningRequirement(CodeSigningRequirements.helper)
-            connection.interruptionHandler = {
-                completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
-            }
-            connection.invalidationHandler = {
-                completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
-            }
+            configure(connection, completion: completion)
             connection.resume()
 
             guard let helper = connection.remoteObjectProxyWithErrorHandler({ _ in
@@ -85,14 +95,28 @@ struct PrivilegedHelperClient: IconApplying, Sendable {
             }
         }
     }
+
+    private func configure<Value: Sendable>(
+        _ connection: NSXPCConnection,
+        completion: XPCCompletion<Value>
+    ) {
+        connection.remoteObjectInterface = NSXPCInterface(with: IconHelperXPCProtocol.self)
+        connection.setCodeSigningRequirement(CodeSigningRequirements.helper)
+        connection.interruptionHandler = {
+            completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
+        }
+        connection.invalidationHandler = {
+            completion.finish(.failure(CocoaError(.fileWriteNoPermission)))
+        }
+    }
 }
 
-private final class XPCCompletion: @unchecked Sendable {
+private final class XPCCompletion<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var hasFinished = false
-    var continuation: CheckedContinuation<Void, Error>?
+    var continuation: CheckedContinuation<Value, Error>?
 
-    func finish(_ result: Result<Void, Error>) {
+    func finish(_ result: Result<Value, Error>) {
         lock.lock()
         defer { lock.unlock() }
 

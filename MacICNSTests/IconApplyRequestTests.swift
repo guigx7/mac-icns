@@ -163,6 +163,10 @@ final class IconApplyRequestTests: XCTestCase {
             "identifier \"com.guigx.macicns.helper\" and anchor apple generic and certificate leaf[subject.OU] = \"DHAFYHA4FG\""
         )
     }
+
+    func testPrivilegedHelperProtocolVersionIsTwo() {
+        XCTAssertEqual(HelperProtocolVersion.current, 2)
+    }
 }
 
 private let systemIconURL = URL(filePath: "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns")
