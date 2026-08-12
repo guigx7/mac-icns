@@ -379,6 +379,50 @@ final class RepairCoordinatorTests: XCTestCase {
         XCTAssertEqual(requestCount, 1)
     }
 
+    @MainActor
+    func testManualRepairJoiningAutomaticReconciliationRunsOneFollowUpApply() async throws {
+        var mapping = makeMapping()
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        mapping.status = .restartRequired
+        let runningChecker = BlockingThenConstantRunningChecker(isRunning: true)
+        let applier = RecordingApplier()
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "same"),
+            applicationRunningChecker: runningChecker,
+            applier: applier
+        )
+
+        let automaticRepair = Task {
+            await coordinator.repair(mapping, reason: .fileSystemChange)
+        }
+        await runningChecker.waitUntilFirstCheckStarts()
+
+        let firstManualStarted = expectation(description: "first manual request started")
+        let firstManualRepair = Task { @MainActor in
+            firstManualStarted.fulfill()
+            return await coordinator.repair(mapping, reason: .manual)
+        }
+        let secondManualStarted = expectation(description: "second manual request started")
+        let secondManualRepair = Task { @MainActor in
+            secondManualStarted.fulfill()
+            return await coordinator.repair(mapping, reason: .manual)
+        }
+        await fulfillment(of: [firstManualStarted, secondManualStarted], timeout: 1)
+        await Task.yield()
+
+        await runningChecker.finishFirstCheck()
+        let automaticResult = await automaticRepair.value
+        let firstManualResult = await firstManualRepair.value
+        let secondManualResult = await secondManualRepair.value
+
+        XCTAssertEqual(automaticResult.status, .restartRequired)
+        XCTAssertEqual(firstManualResult.status, .restartRequired)
+        XCTAssertEqual(secondManualResult.status, .restartRequired)
+        let requestCount = await applier.requests.count
+        XCTAssertEqual(requestCount, 1)
+    }
+
     func testRepairAllContinuesWhenOneMappingFails() async throws {
         var failingMapping = makeMapping()
         failingMapping.appFingerprint = "old-app"
@@ -455,6 +499,46 @@ private struct StubRunningChecker: ApplicationRunningChecking {
 
     func isRunning(bundleIdentifier: String) async -> Bool {
         runningValue
+    }
+}
+
+private actor BlockingThenConstantRunningChecker: ApplicationRunningChecking {
+    private let runningValue: Bool
+    private var checkCount = 0
+    private var firstCheckStarted = false
+    private var firstCheckWaiters: [CheckedContinuation<Void, Never>] = []
+    private var firstCheckContinuation: CheckedContinuation<Bool, Never>?
+
+    init(isRunning: Bool) {
+        runningValue = isRunning
+    }
+
+    func isRunning(bundleIdentifier _: String) async -> Bool {
+        checkCount += 1
+        guard checkCount == 1 else {
+            return runningValue
+        }
+
+        firstCheckStarted = true
+        firstCheckWaiters.forEach { $0.resume() }
+        firstCheckWaiters.removeAll()
+        return await withCheckedContinuation { continuation in
+            firstCheckContinuation = continuation
+        }
+    }
+
+    func waitUntilFirstCheckStarts() async {
+        guard !firstCheckStarted else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            firstCheckWaiters.append(continuation)
+        }
+    }
+
+    func finishFirstCheck() {
+        firstCheckContinuation?.resume(returning: runningValue)
+        firstCheckContinuation = nil
     }
 }
 

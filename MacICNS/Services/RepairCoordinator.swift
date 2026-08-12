@@ -27,11 +27,17 @@ struct RepairFailureDetails: Equatable, Sendable {
 }
 
 actor RepairCoordinator {
+    private struct ActiveRepair {
+        let token: UUID
+        let task: Task<IconMapping, Never>
+        let includesManualRepair: Bool
+    }
+
     private let fingerprinting: any Fingerprinting
     private let locator: any ApplicationLocating
     private let applicationRunningChecker: any ApplicationRunningChecking
     private let applier: any IconApplying
-    private var activeRepairs: [UUID: Task<IconMapping, Never>] = [:]
+    private var activeRepairs: [UUID: ActiveRepair] = [:]
     private var mappingsByID: [UUID: IconMapping] = [:]
     private var mappingOrder: [UUID] = []
     private var failureDetailsByID: [UUID: RepairFailureDetails] = [:]
@@ -50,25 +56,38 @@ actor RepairCoordinator {
 
     func repair(_ mapping: IconMapping, reason: RepairReason) async -> IconMapping {
         if let activeRepair = activeRepairs[mapping.id] {
-            return await activeRepair.value
+            if reason == .manual, !activeRepair.includesManualRepair {
+                let token = UUID()
+                let repair = Task { [self] in
+                    _ = await activeRepair.task.value
+                    return await performRepair(mapping, reason: .manual)
+                }
+                let manualFollowUp = ActiveRepair(
+                    token: token,
+                    task: repair,
+                    includesManualRepair: true
+                )
+                activeRepairs[mapping.id] = manualFollowUp
+                return await finish(manualFollowUp, mappingID: mapping.id)
+            }
+            return await finish(activeRepair, mappingID: mapping.id)
         }
 
+        let token = UUID()
         let repair = Task { [self] in
             await performRepair(mapping, reason: reason)
         }
-        activeRepairs[mapping.id] = repair
-
-        let repairedMapping = await repair.value
-        activeRepairs[mapping.id] = nil
-        mappingsByID[repairedMapping.id] = repairedMapping
-        return repairedMapping
+        let activeRepair = ActiveRepair(
+            token: token,
+            task: repair,
+            includesManualRepair: reason == .manual
+        )
+        activeRepairs[mapping.id] = activeRepair
+        return await finish(activeRepair, mappingID: mapping.id)
     }
 
     func setEnabled(_ isEnabled: Bool, for mapping: IconMapping) async -> IconMapping {
-        if let activeRepair = activeRepairs[mapping.id] {
-            _ = await activeRepair.value
-            activeRepairs[mapping.id] = nil
-        }
+        await finishActiveRepairs(for: mapping.id)
 
         if isEnabled {
             guard !mapping.isEnabled else {
@@ -115,10 +134,7 @@ actor RepairCoordinator {
     }
 
     func resetForRemoval(_ mapping: IconMapping) async throws {
-        if let activeRepair = activeRepairs[mapping.id] {
-            _ = await activeRepair.value
-            activeRepairs[mapping.id] = nil
-        }
+        await finishActiveRepairs(for: mapping.id)
         var resolvedMapping = mapping
         guard let applicationURL = resolveApplicationURL(for: &resolvedMapping) else {
             throw CocoaError(.fileNoSuchFile)
@@ -166,6 +182,21 @@ actor RepairCoordinator {
             }
             setMappings(repairedMappings)
             return repairedMappings
+        }
+    }
+
+    private func finish(_ activeRepair: ActiveRepair, mappingID: UUID) async -> IconMapping {
+        let repairedMapping = await activeRepair.task.value
+        if activeRepairs[mappingID]?.token == activeRepair.token {
+            activeRepairs[mappingID] = nil
+            mappingsByID[repairedMapping.id] = repairedMapping
+        }
+        return repairedMapping
+    }
+
+    private func finishActiveRepairs(for mappingID: UUID) async {
+        while let activeRepair = activeRepairs[mappingID] {
+            _ = await finish(activeRepair, mappingID: mappingID)
         }
     }
 

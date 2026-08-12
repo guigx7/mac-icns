@@ -1,6 +1,11 @@
 import Combine
 import Foundation
 
+typealias AppStateMappingFileMonitorFactory = @MainActor (
+    RepairCoordinator,
+    @escaping MappingFileMonitor.RepairHandler
+) -> MappingFileMonitor
+
 @MainActor
 final class AppState: ObservableObject {
     @Published private(set) var mappings: [IconMapping] = []
@@ -15,16 +20,20 @@ final class AppState: ObservableObject {
     private let diagnosticLogger: DiagnosticLogger
     private let applicationRunningChecker: any ApplicationRunningChecking
     private let applicationTerminationObserver: any ApplicationTerminationObserving
+    private let mappingFileMonitorFactory: AppStateMappingFileMonitorFactory
     private var hasLaunched = false
     private var mappingRevision = 0
-    private lazy var monitor = MappingFileMonitor(repairCoordinator: repairCoordinator) { [weak self] mapping in
-        guard let self else {
-            return
+    private lazy var monitor = mappingFileMonitorFactory(
+        repairCoordinator,
+        { [weak self] mapping in
+            guard let self else {
+                return
+            }
+            self.replace(mapping)
+            self.saveMappings()
+            Task { await self.synchronizeFailureDetails(for: [mapping]) }
         }
-        self.replace(mapping)
-        self.saveMappings()
-        Task { await self.synchronizeFailureDetails(for: [mapping]) }
-    }
+    )
 
     init(
         repository: any MappingRepository = JSONMappingRepository(),
@@ -32,7 +41,10 @@ final class AppState: ObservableObject {
         eligibilityPruner: MappingEligibilityPruner = MappingEligibilityPruner(),
         diagnosticLogger: DiagnosticLogger = DiagnosticLogger(),
         applicationRunningChecker: any ApplicationRunningChecking = WorkspaceApplicationRuntime.shared,
-        applicationTerminationObserver: any ApplicationTerminationObserving = WorkspaceApplicationRuntime.shared
+        applicationTerminationObserver: any ApplicationTerminationObserving = WorkspaceApplicationRuntime.shared,
+        mappingFileMonitorFactory: @escaping AppStateMappingFileMonitorFactory = { coordinator, onRepair in
+            MappingFileMonitor(repairCoordinator: coordinator, onRepair: onRepair)
+        }
     ) {
         self.repository = repository
         self.repairCoordinator = repairCoordinator
@@ -40,6 +52,7 @@ final class AppState: ObservableObject {
         self.diagnosticLogger = diagnosticLogger
         self.applicationRunningChecker = applicationRunningChecker
         self.applicationTerminationObserver = applicationTerminationObserver
+        self.mappingFileMonitorFactory = mappingFileMonitorFactory
     }
 
     func launch() {
@@ -56,16 +69,16 @@ final class AppState: ObservableObject {
     }
 
     func applicationDidTerminate(bundleIdentifier: String) async {
-        let matchingIDs: Set<UUID> = Set(mappings.compactMap { mapping in
+        let checkedMappingsByID: [UUID: IconMapping] = mappings.reduce(into: [:]) { result, mapping in
             guard mapping.isEnabled,
                   mapping.status == .restartRequired,
                   mapping.bundleIdentifier == bundleIdentifier
             else {
-                return nil
+                return
             }
-            return mapping.id
-        })
-        guard !matchingIDs.isEmpty else {
+            result[mapping.id] = mapping
+        }
+        guard !checkedMappingsByID.isEmpty else {
             return
         }
         let isStillRunning = await applicationRunningChecker.isRunning(
@@ -76,10 +89,8 @@ final class AppState: ObservableObject {
         }
 
         let currentMatchingIndices = mappings.indices.filter { index in
-            mappings[index].isEnabled
-                && mappings[index].status == .restartRequired
-                && mappings[index].bundleIdentifier == bundleIdentifier
-                && matchingIDs.contains(mappings[index].id)
+            let mapping = mappings[index]
+            return checkedMappingsByID[mapping.id] == mapping
         }
         guard !currentMatchingIndices.isEmpty else {
             return
@@ -90,6 +101,7 @@ final class AppState: ObservableObject {
         }
         mappingRevision += 1
         saveMappings()
+        await monitor.start(mappings: mappings)
         recordDiagnostic("Application restart completed for \(bundleIdentifier).")
     }
 

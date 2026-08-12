@@ -133,6 +133,63 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
+    func testTerminationReconcilesMonitorSnapshotBeforeLaterFilesystemRepair() async throws {
+        let fixture = try MappingFixture(bundleIdentifier: "com.example.Target")
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        mapping.status = .restartRequired
+        let repository = MemoryMappingRepository([mapping])
+        let runningChecker = MutableRunningChecker(values: ["com.example.Target": true])
+        let streamFactory = AppStateMappingEventStreamFactory()
+        let coordinator = RepairCoordinator(
+            fingerprinting: ConstantFingerprinting(value: "same"),
+            applicationRunningChecker: runningChecker,
+            applier: LifecycleApplier()
+        )
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: coordinator,
+            applicationRunningChecker: runningChecker,
+            applicationTerminationObserver: NoopTerminationObserver(),
+            mappingFileMonitorFactory: { coordinator, onRepair in
+                MappingFileMonitor(
+                    repairCoordinator: coordinator,
+                    onRepair: onRepair,
+                    streamFactory: streamFactory.make,
+                    schedulerFactory: { repair, completion in
+                        RepairScheduler(
+                            delay: .zero,
+                            clock: ImmediateRepairSchedulingClock(),
+                            repair: repair,
+                            repairCompletion: completion
+                        )
+                    }
+                )
+            }
+        )
+        appState.loadMappings()
+        await appState.apply(mapping)
+
+        await runningChecker.setRunning(false, bundleIdentifier: "com.example.Target")
+        await appState.applicationDidTerminate(bundleIdentifier: "com.example.Target")
+        XCTAssertEqual(appState.mappings.first?.status, .upToDate)
+
+        await runningChecker.setRunning(true, bundleIdentifier: "com.example.Target")
+        let filesystemRepairSaved = expectation(description: "filesystem repair persisted")
+        repository.notifyOnNextSave {
+            filesystemRepairSaved.fulfill()
+        }
+        let stream = try XCTUnwrap(streamFactory.latestStream)
+        stream.emit(paths: [mapping.applicationURL.path])
+        await fulfillment(of: [filesystemRepairSaved], timeout: 1)
+
+        XCTAssertEqual(appState.mappings.first?.status, .upToDate)
+        XCTAssertEqual(repository.savedMappings.first?.status, .upToDate)
+    }
+
+    @MainActor
     func testTargetTerminationKeepsRestartRequiredWhileAnotherProcessRuns() async throws {
         let fixture = try MappingFixture(bundleIdentifier: "com.example.Target")
         defer { fixture.remove() }
@@ -218,6 +275,46 @@ final class MacICNSTests: XCTestCase {
         XCTAssertEqual(appState.mappings.map(\.id), [unrelated.id])
         XCTAssertEqual(appState.mappings.first?.status, .restartRequired)
         XCTAssertEqual(repository.savedMappings.map(\.id), [unrelated.id])
+        XCTAssertEqual(repository.savedMappings.first?.status, .restartRequired)
+    }
+
+    @MainActor
+    func testTerminationDoesNotOverwriteInterleavedSameIDIconReplacement() async throws {
+        let fixture = try MappingFixture(bundleIdentifier: "com.example.Target")
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        mapping.status = .restartRequired
+        let repository = MemoryMappingRepository([mapping])
+        let terminationChecker = BlockingRunningChecker()
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "same"),
+                applicationRunningChecker: ConstantRunningChecker(isRunning: true),
+                applier: IconReplacementApplier()
+            ),
+            applicationRunningChecker: terminationChecker,
+            applicationTerminationObserver: NoopTerminationObserver()
+        )
+        appState.loadMappings()
+        await appState.apply(mapping)
+        let currentMapping = try XCTUnwrap(appState.mappings.first)
+
+        let termination = Task {
+            await appState.applicationDidTerminate(bundleIdentifier: "com.example.Target")
+        }
+        await terminationChecker.waitUntilCheckStarts()
+        await appState.replaceIcon(for: currentMapping, with: fixture.replacementIconURL)
+        await terminationChecker.finish(isRunning: false)
+        await termination.value
+
+        XCTAssertEqual(
+            appState.mappings.first?.iconURL,
+            fixture.replacementIconURL.standardizedFileURL
+        )
+        XCTAssertEqual(appState.mappings.first?.status, .restartRequired)
         XCTAssertEqual(repository.savedMappings.first?.status, .restartRequired)
     }
 
@@ -561,6 +658,7 @@ private final class MemoryMappingRepository: MappingRepository, @unchecked Senda
     private var loadedMappings: [IconMapping]
     private(set) var savedMappings: [IconMapping]
     private(set) var saveCount = 0
+    private var nextSaveHandler: (() -> Void)?
 
     init(_ mappings: [IconMapping]) {
         loadedMappings = mappings
@@ -573,6 +671,48 @@ private final class MemoryMappingRepository: MappingRepository, @unchecked Senda
         saveCount += 1
         savedMappings = mappings
         loadedMappings = mappings
+        let handler = nextSaveHandler
+        nextSaveHandler = nil
+        handler?()
+    }
+
+    func notifyOnNextSave(_ handler: @escaping () -> Void) {
+        nextSaveHandler = handler
+    }
+}
+
+private struct ImmediateRepairSchedulingClock: RepairSchedulingClock {
+    func sleep(for _: Duration) async throws {}
+}
+
+@MainActor
+private final class AppStateMappingEventStreamFactory {
+    private(set) var latestStream: AppStateMappingEventStream?
+
+    func make(
+        directories _: Set<String>,
+        handler: @escaping @Sendable ([String]) -> Void
+    ) -> any MappingEventStream {
+        let stream = AppStateMappingEventStream(handler: handler)
+        latestStream = stream
+        return stream
+    }
+}
+
+@MainActor
+private final class AppStateMappingEventStream: MappingEventStream {
+    private let handler: @Sendable ([String]) -> Void
+
+    init(handler: @escaping @Sendable ([String]) -> Void) {
+        self.handler = handler
+    }
+
+    func start() {}
+
+    func stop() {}
+
+    func emit(paths: [String]) {
+        handler(paths)
     }
 }
 
