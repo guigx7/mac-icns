@@ -13,9 +13,11 @@ final class AppState: ObservableObject {
     @Published private(set) var operationError: String?
     @Published private(set) var busyMappingIDs: Set<UUID> = []
     @Published private(set) var mappingFailureMessages: [UUID: String] = [:]
+    @Published private(set) var isRefreshingAll = false
 
     private let repository: any MappingRepository
     private let repairCoordinator: RepairCoordinator
+    private let dockReloader: any DockReloading
     private let eligibilityPruner: MappingEligibilityPruner
     private let diagnosticLogger: DiagnosticLogger
     private let applicationRunningChecker: any ApplicationRunningChecking
@@ -42,12 +44,14 @@ final class AppState: ObservableObject {
         diagnosticLogger: DiagnosticLogger = DiagnosticLogger(),
         applicationRunningChecker: any ApplicationRunningChecking = WorkspaceApplicationRuntime.shared,
         applicationTerminationObserver: any ApplicationTerminationObserving = WorkspaceApplicationRuntime.shared,
+        dockReloader: any DockReloading = DockReloader(),
         mappingFileMonitorFactory: @escaping AppStateMappingFileMonitorFactory = { coordinator, onRepair in
             MappingFileMonitor(repairCoordinator: coordinator, onRepair: onRepair)
         }
     ) {
         self.repository = repository
         self.repairCoordinator = repairCoordinator
+        self.dockReloader = dockReloader
         self.eligibilityPruner = eligibilityPruner
         self.diagnosticLogger = diagnosticLogger
         self.applicationRunningChecker = applicationRunningChecker
@@ -201,7 +205,19 @@ final class AppState: ObservableObject {
     }
 
     func refreshAll() async {
+        guard !isRefreshingAll else {
+            return
+        }
+        isRefreshingAll = true
+        defer { isRefreshingAll = false }
         await refreshAll(reason: .manual, diagnosticMessage: "Manual icon refresh requested.")
+        do {
+            try await dockReloader.reload()
+            recordDiagnostic("Reloaded the Dock after manual icon refresh.")
+        } catch {
+            operationError = "Could not reload the Dock."
+            recordDiagnostic("Could not reload the Dock: \(error.localizedDescription)")
+        }
     }
 
     private func refreshAll(reason: RepairReason, diagnosticMessage: String) async {

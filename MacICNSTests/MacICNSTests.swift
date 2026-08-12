@@ -632,6 +632,91 @@ final class MacICNSTests: XCTestCase {
         let appliedIconURLs = await applier.appliedIconURLs
         XCTAssertEqual(appliedIconURLs, [])
     }
+
+    @MainActor
+    func testManualRefreshReappliesMappingsThenReloadsDockOnce() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        let repository = MemoryMappingRepository([fixture.mapping])
+        let applier = LifecycleApplier()
+        let reloader = RecordingDockReloader()
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: applier),
+            dockReloader: reloader
+        )
+        appState.loadMappings()
+
+        await appState.refreshAll()
+
+        let reloadCount = await reloader.reloadsPerformed()
+        XCTAssertEqual(reloadCount, 1)
+        XCTAssertEqual(repository.savedMappings.count, 1)
+    }
+
+    @MainActor
+    func testManualRefreshReloadsDockWhenAMappingRepairFails() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        let repository = MemoryMappingRepository([fixture.mapping])
+        let reloader = RecordingDockReloader()
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: FailingApplyLifecycleApplier()),
+            dockReloader: reloader
+        )
+        appState.loadMappings()
+
+        await appState.refreshAll()
+
+        let reloadCount = await reloader.reloadsPerformed()
+        XCTAssertEqual(reloadCount, 1)
+        XCTAssertEqual(repository.savedMappings.first?.status, .failed)
+    }
+
+    @MainActor
+    func testDockReloadFailurePreservesRefreshResultsAndShowsOperationError() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        let repository = MemoryMappingRepository([fixture.mapping])
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: LifecycleApplier()),
+            dockReloader: FailingDockReloader()
+        )
+        appState.loadMappings()
+
+        await appState.refreshAll()
+
+        XCTAssertEqual(repository.savedMappings.first?.status, .upToDate)
+        XCTAssertEqual(appState.operationError, "Could not reload the Dock.")
+    }
+
+    @MainActor
+    func testManualRefreshDoesNotStartSecondDockReloadWhileFirstIsRunning() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        let repository = MemoryMappingRepository([fixture.mapping])
+        let reloader = BlockingDockReloader()
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: LifecycleApplier()),
+            dockReloader: reloader
+        )
+        appState.loadMappings()
+
+        let firstRefresh = Task { await appState.refreshAll() }
+        await reloader.waitUntilReloadStarts()
+
+        XCTAssertTrue(appState.isRefreshingAll)
+        await appState.refreshAll()
+        let reloadCount = await reloader.reloadsPerformed()
+        XCTAssertEqual(reloadCount, 1)
+
+        await reloader.finishReload()
+        await firstRefresh.value
+        XCTAssertFalse(appState.isRefreshingAll)
+    }
 }
 private struct EmptyMappingRepository: MappingRepository {
     func load() throws -> [IconMapping] { [] }
@@ -729,6 +814,67 @@ private actor LifecycleApplier: IconApplying {
         if failReset {
             throw CocoaError(.fileWriteNoPermission)
         }
+    }
+}
+
+private actor FailingApplyLifecycleApplier: IconApplying {
+    func apply(applicationURL _: URL, iconURL _: URL) async throws {
+        throw CocoaError(.fileWriteUnknown)
+    }
+
+    func reset(applicationURL _: URL) async throws {}
+}
+
+private actor RecordingDockReloader: DockReloading {
+    private(set) var reloadCount = 0
+
+    func reload() async throws {
+        reloadCount += 1
+    }
+
+    func reloadsPerformed() -> Int {
+        reloadCount
+    }
+}
+
+private struct FailingDockReloader: DockReloading {
+    func reload() async throws {
+        throw DockReloadError.launchFailed
+    }
+}
+
+private actor BlockingDockReloader: DockReloading {
+    private var didStart = false
+    private var reloadStartWaiters: [CheckedContinuation<Void, Never>] = []
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var reloadCount = 0
+
+    func reload() async throws {
+        reloadCount += 1
+        didStart = true
+        reloadStartWaiters.forEach { $0.resume() }
+        reloadStartWaiters.removeAll()
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilReloadStarts() async {
+        guard !didStart else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            reloadStartWaiters.append(continuation)
+        }
+    }
+
+    func finishReload() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    func reloadsPerformed() -> Int {
+        reloadCount
     }
 }
 
