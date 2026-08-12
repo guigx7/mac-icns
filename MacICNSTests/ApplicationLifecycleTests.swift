@@ -52,4 +52,15 @@ final class ApplicationLifecycleTests: XCTestCase {
 
         XCTAssertEqual(policies, [.accessory, .regular])
     }
+
+    func testApplicationDelegateKeepsProcessAliveAfterLastWindowCloses() {
+        let applicationDelegate = MacICNSApplicationDelegate(
+            lifecycleController: ApplicationLifecycleController { _ in true },
+            visibleWindowProvider: { false }
+        )
+
+        XCTAssertFalse(
+            applicationDelegate.applicationShouldTerminateAfterLastWindowClosed(.shared)
+        )
+    }
 }

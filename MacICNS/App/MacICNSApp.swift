@@ -7,6 +7,8 @@ struct MacICNSApp: App {
 
     @StateObject private var appState = AppState()
     @StateObject private var loginItemService = LoginItemService()
+    @NSApplicationDelegateAdaptor(MacICNSApplicationDelegate.self)
+    private var applicationDelegate
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
@@ -45,6 +47,7 @@ struct MacICNSApp: App {
     }
 
     private func focusMainWindow() {
+        applicationDelegate.lifecycleController.showApplication()
         openWindow(id: Self.managementWindowID)
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
