@@ -1,6 +1,6 @@
 import Foundation
 
-enum RepairReason: Sendable {
+enum RepairReason: Equatable, Sendable {
     case launch
     case login
     case manual

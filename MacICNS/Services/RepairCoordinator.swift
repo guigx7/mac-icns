@@ -29,6 +29,7 @@ struct RepairFailureDetails: Equatable, Sendable {
 actor RepairCoordinator {
     private let fingerprinting: any Fingerprinting
     private let locator: any ApplicationLocating
+    private let applicationRunningChecker: any ApplicationRunningChecking
     private let applier: any IconApplying
     private var activeRepairs: [UUID: Task<IconMapping, Never>] = [:]
     private var mappingsByID: [UUID: IconMapping] = [:]
@@ -38,10 +39,12 @@ actor RepairCoordinator {
     init(
         fingerprinting: any Fingerprinting = BundleFingerprinting(),
         locator: any ApplicationLocating = ApplicationLocator(),
+        applicationRunningChecker: any ApplicationRunningChecking = WorkspaceApplicationRuntime.shared,
         applier: any IconApplying
     ) {
         self.fingerprinting = fingerprinting
         self.locator = locator
+        self.applicationRunningChecker = applicationRunningChecker
         self.applier = applier
     }
 
@@ -76,7 +79,7 @@ actor RepairCoordinator {
             candidate.appFingerprint = nil
             candidate.iconFingerprint = nil
             let repaired = await repair(candidate, reason: .mappingEdited)
-            guard repaired.status == .upToDate else {
+            guard repaired.status.isSuccessful else {
                 var unchanged = mapping
                 unchanged.status = repaired.status
                 return unchanged
@@ -184,9 +187,18 @@ actor RepairCoordinator {
             let appFingerprint = try fingerprinting.fingerprint(of: applicationURL)
             let iconFingerprint = try fingerprinting.fingerprint(of: repairedMapping.iconURL)
 
-            guard appFingerprint != repairedMapping.appFingerprint
-                || iconFingerprint != repairedMapping.iconFingerprint else {
-                repairedMapping.status = .upToDate
+            let fingerprintsChanged = appFingerprint != repairedMapping.appFingerprint
+                || iconFingerprint != repairedMapping.iconFingerprint
+
+            if !fingerprintsChanged, reason != .manual {
+                if repairedMapping.status == .restartRequired,
+                   let bundleIdentifier = repairedMapping.bundleIdentifier {
+                    repairedMapping.status = await applicationRunningChecker.isRunning(
+                        bundleIdentifier: bundleIdentifier
+                    ) ? .restartRequired : .upToDate
+                } else {
+                    repairedMapping.status = .upToDate
+                }
                 failureDetailsByID[mapping.id] = nil
                 return repairedMapping
             }
@@ -195,7 +207,12 @@ actor RepairCoordinator {
             repairedMapping.appFingerprint = appFingerprint
             repairedMapping.iconFingerprint = iconFingerprint
             repairedMapping.lastSuccessAt = Date()
-            repairedMapping.status = .upToDate
+            if let bundleIdentifier = repairedMapping.bundleIdentifier,
+               await applicationRunningChecker.isRunning(bundleIdentifier: bundleIdentifier) {
+                repairedMapping.status = .restartRequired
+            } else {
+                repairedMapping.status = .upToDate
+            }
             failureDetailsByID[mapping.id] = nil
         } catch {
             repairedMapping.status = isPermissionFailure(error) ? .needsPermission : .failed

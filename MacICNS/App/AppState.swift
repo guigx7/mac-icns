@@ -123,7 +123,7 @@ final class AppState: ObservableObject {
         }
 
         let repaired = await repairCoordinator.repair(candidate, reason: .mappingEdited)
-        guard repaired.status == .upToDate else {
+        guard repaired.status.isSuccessful else {
             await synchronizeFailureDetails(for: [repaired])
             operationError = mappingFailureMessages[repaired.id]
                 ?? "The new icon could not be applied, so the previous mapping was preserved."

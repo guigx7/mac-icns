@@ -68,4 +68,19 @@ final class JSONMappingRepositoryTests: XCTestCase {
 
         XCTAssertEqual(try repository.load().first?.isEnabled, false)
     }
+
+    func testRoundTripPreservesRestartRequiredStatus() throws {
+        let url = temporaryDirectory.appending(path: "mappings.json")
+        let repository = JSONMappingRepository(fileURL: url)
+        var mapping = IconMapping(
+            applicationURL: URL(filePath: "/Applications/Test.app"),
+            bundleIdentifier: "com.example.Test",
+            iconURL: URL(filePath: "/tmp/Test.icns")
+        )
+        mapping.status = .restartRequired
+
+        try repository.save([mapping])
+
+        XCTAssertEqual(try repository.load().first?.status, .restartRequired)
+    }
 }

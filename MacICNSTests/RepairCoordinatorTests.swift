@@ -37,11 +37,104 @@ final class RepairCoordinatorTests: XCTestCase {
             applier: applier
         )
 
-        let repaired = await coordinator.repair(mapping, reason: .manual)
+        let repaired = await coordinator.repair(mapping, reason: .launch)
 
         let requests = await applier.requests
         XCTAssertTrue(requests.isEmpty)
         XCTAssertEqual(repaired.status, .upToDate)
+    }
+
+    func testManualRepairAppliesEvenWhenFingerprintsAreUnchanged() async throws {
+        var mapping = makeMapping()
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let applier = RecordingApplier()
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "same"),
+            applicationRunningChecker: StubRunningChecker(isRunning: false),
+            applier: applier
+        )
+
+        let repaired = await coordinator.repair(mapping, reason: .manual)
+
+        let requestCount = await applier.requests.count
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(repaired.status, .upToDate)
+    }
+
+    func testSuccessfulRepairOfRunningApplicationRequiresRestart() async throws {
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "new"),
+            applicationRunningChecker: StubRunningChecker(isRunning: true),
+            applier: RecordingApplier()
+        )
+
+        let repaired = await coordinator.repair(makeMapping(), reason: .manual)
+
+        XCTAssertEqual(repaired.status, .restartRequired)
+        let failureDetails = await coordinator.failureDetails(for: repaired.id)
+        XCTAssertNil(failureDetails)
+    }
+
+    func testSuccessfulRepairWithoutBundleIdentifierIsApplied() async throws {
+        var mapping = makeMapping()
+        mapping.bundleIdentifier = nil
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "new"),
+            applicationRunningChecker: StubRunningChecker(isRunning: true),
+            applier: RecordingApplier()
+        )
+
+        let repaired = await coordinator.repair(mapping, reason: .manual)
+
+        XCTAssertEqual(repaired.status, .upToDate)
+    }
+
+    func testUnchangedRestartRequiredMappingRemainsPendingWhileTargetRuns() async throws {
+        var mapping = makeMapping()
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        mapping.status = .restartRequired
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "same"),
+            applicationRunningChecker: StubRunningChecker(isRunning: true),
+            applier: RecordingApplier()
+        )
+
+        let repaired = await coordinator.repair(mapping, reason: .launch)
+
+        XCTAssertEqual(repaired.status, .restartRequired)
+    }
+
+    func testUnchangedRestartRequiredMappingBecomesAppliedAfterTargetStops() async throws {
+        var mapping = makeMapping()
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        mapping.status = .restartRequired
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "same"),
+            applicationRunningChecker: StubRunningChecker(isRunning: false),
+            applier: RecordingApplier()
+        )
+
+        let repaired = await coordinator.repair(mapping, reason: .launch)
+
+        XCTAssertEqual(repaired.status, .upToDate)
+    }
+
+    func testEnablingRunningApplicationPersistsRestartRequiredSuccess() async throws {
+        var mapping = makeMapping()
+        mapping.isEnabled = false
+        let coordinator = RepairCoordinator(
+            fingerprinting: StubFingerprinting(value: "new"),
+            applicationRunningChecker: StubRunningChecker(isRunning: true),
+            applier: RecordingApplier()
+        )
+
+        let repaired = await coordinator.setEnabled(true, for: mapping)
+
+        XCTAssertTrue(repaired.isEnabled)
+        XCTAssertEqual(repaired.status, .restartRequired)
     }
 
     func testRepairSkipsDisabledMapping() async throws {
@@ -350,6 +443,18 @@ private struct StubLocator: ApplicationLocating {
 
     func resolve(_ bundleIdentifier: String) -> URL? {
         result
+    }
+}
+
+private struct StubRunningChecker: ApplicationRunningChecking {
+    let runningValue: Bool
+
+    init(isRunning: Bool) {
+        runningValue = isRunning
+    }
+
+    func isRunning(bundleIdentifier: String) async -> Bool {
+        runningValue
     }
 }
 

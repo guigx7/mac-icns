@@ -40,6 +40,7 @@
 		B00000000000000000000002 /* MappingEligibilityPruner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* MappingEligibilityPruner.swift */; };
 		C00000000000000000000001 /* ApplicationLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000011 /* ApplicationLifecycleTests.swift */; };
 		C00000000000000000000002 /* ApplicationLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000012 /* ApplicationLifecycle.swift */; };
+		D10000000000000000000001 /* ApplicationRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000011 /* ApplicationRuntime.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -93,6 +94,7 @@
 		B00000000000000000000012 /* MappingEligibilityPruner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MappingEligibilityPruner.swift; sourceTree = "<group>"; };
 		C00000000000000000000011 /* ApplicationLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLifecycleTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000012 /* ApplicationLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLifecycle.swift; sourceTree = "<group>"; };
+		D10000000000000000000011 /* ApplicationRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationRuntime.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -207,6 +209,7 @@
 				AF0000000000000000000012 /* ApplicationCatalog.swift */,
 				AE0000000000000000000012 /* ApplicationEligibilityService.swift */,
 				AA0000000000000000000012 /* ApplicationIconProvider.swift */,
+				D10000000000000000000011 /* ApplicationRuntime.swift */,
 				A30000000000000000000013 /* BundleFingerprinting.swift */,
 				A30000000000000000000014 /* ApplicationLocator.swift */,
 				A30000000000000000000015 /* RepairCoordinator.swift */,
@@ -339,6 +342,7 @@
 				A90000000000000000000003 /* LoginItemService.swift in Sources */,
 				B00000000000000000000002 /* MappingEligibilityPruner.swift in Sources */,
 				C00000000000000000000002 /* ApplicationLifecycle.swift in Sources */,
+				D10000000000000000000001 /* ApplicationRuntime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

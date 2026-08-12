@@ -514,6 +514,7 @@ private extension MappingStatus {
     var displayName: String {
         switch self {
         case .upToDate: "Applied"
+        case .restartRequired: "Restart required"
         case .needsPermission: "Needs permission"
         case .missingApp: "Application missing"
         case .failed: "Could not apply"

@@ -257,6 +257,34 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
+    func testEnabledIconReplacementPersistsWhenRunningAppRequiresRestart() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.bundleIdentifier = "com.example.Target"
+        let repository = MemoryMappingRepository([mapping])
+        let runningChecker = ConstantRunningChecker(isRunning: true)
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "new"),
+                applicationRunningChecker: runningChecker,
+                applier: IconReplacementApplier()
+            )
+        )
+        appState.loadMappings()
+        try await Task.sleep(for: .milliseconds(50))
+
+        await appState.replaceIcon(for: mapping, with: fixture.replacementIconURL)
+
+        XCTAssertEqual(
+            repository.savedMappings.first?.iconURL,
+            fixture.replacementIconURL.standardizedFileURL
+        )
+        XCTAssertEqual(repository.savedMappings.first?.status, .restartRequired)
+    }
+
+    @MainActor
     func testFailedEnabledIconReplacementPreservesPreviousMapping() async throws {
         let fixture = try MappingFixture()
         defer { fixture.remove() }
@@ -399,6 +427,19 @@ private struct ConstantFingerprinting: Fingerprinting {
 
     func fingerprint(of url: URL) throws -> String { value }
 }
+
+private struct ConstantRunningChecker: ApplicationRunningChecking {
+    let runningValue: Bool
+
+    init(isRunning: Bool) {
+        runningValue = isRunning
+    }
+
+    func isRunning(bundleIdentifier: String) async -> Bool {
+        runningValue
+    }
+}
+
 private actor IconReplacementApplier: IconApplying {
     private(set) var appliedIconURLs: [URL] = []
     private let failApply: Bool
