@@ -3,6 +3,11 @@ import XCTest
 @testable import MacICNS
 
 @MainActor
+private final class MiniaturizedWindow: NSWindow {
+    override var isMiniaturized: Bool { true }
+}
+
+@MainActor
 final class ApplicationLifecycleTests: XCTestCase {
     func testStatusLevelWindowDoesNotCountAsUserFacing() {
         let statusWindow = NSWindow(
@@ -13,7 +18,7 @@ final class ApplicationLifecycleTests: XCTestCase {
         )
         statusWindow.level = .statusBar
         statusWindow.orderFront(nil)
-        defer { statusWindow.close() }
+        defer { statusWindow.orderOut(nil) }
 
         XCTAssertFalse(
             ApplicationWindowVisibility.hasVisibleUserFacingWindow(in: [statusWindow])
@@ -37,15 +42,14 @@ final class ApplicationLifecycleTests: XCTestCase {
 
     func testHiddenAndMiniaturizedWindowsDoNotCountAsUserFacing() {
         let hidden = NSWindow()
-        let miniaturized = NSWindow(
+        let miniaturized = MiniaturizedWindow(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 200),
             styleMask: [.titled, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         miniaturized.orderFront(nil)
-        miniaturized.miniaturize(nil)
-        defer { miniaturized.close() }
+        defer { miniaturized.orderOut(nil) }
 
         XCTAssertFalse(
             ApplicationWindowVisibility.hasVisibleUserFacingWindow(in: [hidden, miniaturized])
