@@ -42,6 +42,8 @@
 		C00000000000000000000002 /* ApplicationLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000012 /* ApplicationLifecycle.swift */; };
 		D10000000000000000000001 /* ApplicationRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000011 /* ApplicationRuntime.swift */; };
 		D10000000000000000000002 /* ApplicationRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000012 /* ApplicationRuntimeTests.swift */; };
+		E10000000000000000000001 /* DockReloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000011 /* DockReloader.swift */; };
+		E10000000000000000000002 /* DockReloaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000012 /* DockReloaderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -97,6 +99,8 @@
 		C00000000000000000000012 /* ApplicationLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLifecycle.swift; sourceTree = "<group>"; };
 		D10000000000000000000011 /* ApplicationRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationRuntime.swift; sourceTree = "<group>"; };
 		D10000000000000000000012 /* ApplicationRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationRuntimeTests.swift; sourceTree = "<group>"; };
+		E10000000000000000000011 /* DockReloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockReloader.swift; sourceTree = "<group>"; };
+		E10000000000000000000012 /* DockReloaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockReloaderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -143,6 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000013 /* MacICNSTests.swift */,
+				E10000000000000000000012 /* DockReloaderTests.swift */,
 				D10000000000000000000012 /* ApplicationRuntimeTests.swift */,
 				A20000000000000000000015 /* JSONMappingRepositoryTests.swift */,
 				A30000000000000000000011 /* RepairCoordinatorTests.swift */,
@@ -213,6 +218,7 @@
 				AE0000000000000000000012 /* ApplicationEligibilityService.swift */,
 				AA0000000000000000000012 /* ApplicationIconProvider.swift */,
 				D10000000000000000000011 /* ApplicationRuntime.swift */,
+				E10000000000000000000011 /* DockReloader.swift */,
 				A30000000000000000000013 /* BundleFingerprinting.swift */,
 				A30000000000000000000014 /* ApplicationLocator.swift */,
 				A30000000000000000000015 /* RepairCoordinator.swift */,
@@ -325,6 +331,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AF0000000000000000000002 /* ApplicationCatalog.swift in Sources */,
+				E10000000000000000000001 /* DockReloader.swift in Sources */,
 				AE0000000000000000000002 /* ApplicationEligibilityService.swift in Sources */,
 				AA0000000000000000000002 /* ApplicationIconProvider.swift in Sources */,
 				A10000000000000000000001 /* MacICNSApp.swift in Sources */,
@@ -354,6 +361,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000003 /* MacICNSTests.swift in Sources */,
+				E10000000000000000000002 /* DockReloaderTests.swift in Sources */,
 				D10000000000000000000002 /* ApplicationRuntimeTests.swift in Sources */,
 				AA0000000000000000000001 /* ApplicationIconProviderTests.swift in Sources */,
 				A20000000000000000000005 /* JSONMappingRepositoryTests.swift in Sources */,
