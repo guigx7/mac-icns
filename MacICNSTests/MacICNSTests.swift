@@ -638,24 +638,121 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
-    func testManualRefreshReappliesMappingsThenReloadsDockOnce() async throws {
+    func testManualRefreshRepairsThenPersistsBeforeReloadingDock() async throws {
         let fixture = try MappingFixture()
         defer { fixture.remove() }
-        let repository = MemoryMappingRepository([fixture.mapping])
-        let applier = LifecycleApplier()
-        let reloader = RecordingDockReloader()
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let events = ManualRefreshEventRecorder()
+        let repository = EventRecordingMappingRepository([mapping], events: events)
         let appState = AppState(
             repository: repository,
-            repairCoordinator: RepairCoordinator(applier: applier),
-            dockReloader: reloader
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "same"),
+                applier: EventRecordingApplier(events: events)
+            ),
+            diagnosticLogger: DiagnosticLogger(
+                fileURL: fixture.directory.appending(path: "diagnostics.log")
+            ),
+            dockReloader: EventRecordingDockReloader(events: events)
         )
         appState.loadMappings()
+        await events.waitForEventCount(1)
+        await events.removeAll()
 
         await appState.refreshAll()
 
-        let reloadCount = await reloader.reloadsPerformed()
-        XCTAssertEqual(reloadCount, 1)
-        XCTAssertEqual(repository.savedMappings.count, 1)
+        let recordedEvents = await events.snapshot()
+        XCTAssertEqual(recordedEvents, [.repaired, .persisted, .reloaded])
+    }
+
+    @MainActor
+    func testManualRefreshDoesNotReloadDockWhenPersistenceFails() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let events = ManualRefreshEventRecorder()
+        let repository = ThrowingMappingRepository([mapping], events: events)
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "same"),
+                applier: EventRecordingApplier(events: events)
+            ),
+            diagnosticLogger: DiagnosticLogger(
+                fileURL: fixture.directory.appending(path: "diagnostics.log")
+            ),
+            dockReloader: EventRecordingDockReloader(events: events)
+        )
+        appState.loadMappings()
+        await events.waitForEventCount(1)
+        await events.removeAll()
+
+        await appState.refreshAll()
+
+        let recordedEvents = await events.snapshot()
+        XCTAssertEqual(recordedEvents, [.repaired, .persistenceAttempted])
+        XCTAssertTrue(repository.persistedMappings.isEmpty)
+        XCTAssertEqual(appState.persistenceError, "Could not save mappings.")
+        XCTAssertNil(appState.operationError)
+    }
+
+    @MainActor
+    func testManualRefreshReloadsDockOnceWithNoMappings() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let events = ManualRefreshEventRecorder()
+        let repository = EventRecordingMappingRepository([], events: events)
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                applier: EventRecordingApplier(events: events)
+            ),
+            diagnosticLogger: DiagnosticLogger(
+                fileURL: directory.appending(path: "diagnostics.log")
+            ),
+            dockReloader: EventRecordingDockReloader(events: events)
+        )
+        appState.loadMappings()
+        await events.waitForEventCount(1)
+        await events.removeAll()
+
+        await appState.refreshAll()
+
+        let recordedEvents = await events.snapshot()
+        XCTAssertEqual(recordedEvents, [.persisted, .reloaded])
+    }
+
+    @MainActor
+    func testManualRefreshReloadsDockOnceWithNoEnabledMappings() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.isEnabled = false
+        let events = ManualRefreshEventRecorder()
+        let repository = EventRecordingMappingRepository([mapping], events: events)
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                applier: EventRecordingApplier(events: events)
+            ),
+            diagnosticLogger: DiagnosticLogger(
+                fileURL: fixture.directory.appending(path: "diagnostics.log")
+            ),
+            dockReloader: EventRecordingDockReloader(events: events)
+        )
+        appState.loadMappings()
+        await events.waitForEventCount(1)
+        await events.removeAll()
+
+        await appState.refreshAll()
+
+        let recordedEvents = await events.snapshot()
+        XCTAssertEqual(recordedEvents, [.persisted, .reloaded])
     }
 
     @MainActor
@@ -831,6 +928,112 @@ private final class MemoryMappingRepository: MappingRepository, @unchecked Senda
     }
 }
 
+private final class EventRecordingMappingRepository: MappingRepository, @unchecked Sendable {
+    private var loadedMappings: [IconMapping]
+    private let events: ManualRefreshEventRecorder
+
+    init(_ mappings: [IconMapping], events: ManualRefreshEventRecorder) {
+        loadedMappings = mappings
+        self.events = events
+    }
+
+    func load() throws -> [IconMapping] { loadedMappings }
+
+    func save(_ mappings: [IconMapping]) throws {
+        loadedMappings = mappings
+        events.recordSynchronously(.persisted)
+    }
+}
+
+private final class ThrowingMappingRepository: MappingRepository, @unchecked Sendable {
+    let persistedMappings: [IconMapping] = []
+    private let loadedMappings: [IconMapping]
+    private let events: ManualRefreshEventRecorder
+
+    init(_ mappings: [IconMapping], events: ManualRefreshEventRecorder) {
+        loadedMappings = mappings
+        self.events = events
+    }
+
+    func load() throws -> [IconMapping] { loadedMappings }
+
+    func save(_ mappings: [IconMapping]) throws {
+        events.recordSynchronously(.persistenceAttempted)
+        throw CocoaError(.fileWriteUnknown)
+    }
+}
+
+private actor ManualRefreshEventRecorder {
+    enum Event: Equatable, Sendable {
+        case repaired
+        case persistenceAttempted
+        case persisted
+        case reloaded
+    }
+
+    nonisolated private let storage = ManualRefreshEventStorage()
+
+    func record(_ event: Event) {
+        storage.record(event)
+    }
+
+    nonisolated func recordSynchronously(_ event: Event) {
+        storage.record(event)
+    }
+
+    func waitForEventCount(_ count: Int) async {
+        await storage.waitForEventCount(count)
+    }
+
+    func removeAll() {
+        storage.removeAll()
+    }
+
+    func snapshot() -> [Event] {
+        storage.snapshot()
+    }
+}
+
+private final class ManualRefreshEventStorage: @unchecked Sendable {
+    typealias Event = ManualRefreshEventRecorder.Event
+
+    private let lock = NSLock()
+    private var events: [Event] = []
+    private var eventCountWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    func record(_ event: Event) {
+        lock.lock()
+        events.append(event)
+        let readyWaiters = eventCountWaiters.filter { events.count >= $0.0 }
+        eventCountWaiters.removeAll { events.count >= $0.0 }
+        lock.unlock()
+        readyWaiters.forEach { $0.1.resume() }
+    }
+
+    func waitForEventCount(_ count: Int) async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if events.count >= count {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                eventCountWaiters.append((count, continuation))
+                lock.unlock()
+            }
+        }
+    }
+
+    func removeAll() {
+        lock.withLock {
+            events.removeAll()
+        }
+    }
+
+    func snapshot() -> [Event] {
+        lock.withLock { events }
+    }
+}
+
 private struct ImmediateRepairSchedulingClock: RepairSchedulingClock {
     func sleep(for _: Duration) async throws {}
 }
@@ -890,6 +1093,20 @@ private actor FailingApplyLifecycleApplier: IconApplying {
     func reset(applicationURL _: URL) async throws {}
 }
 
+private actor EventRecordingApplier: IconApplying {
+    private let events: ManualRefreshEventRecorder
+
+    init(events: ManualRefreshEventRecorder) {
+        self.events = events
+    }
+
+    func apply(applicationURL _: URL, iconURL _: URL) async throws {
+        await events.record(.repaired)
+    }
+
+    func reset(applicationURL _: URL) async throws {}
+}
+
 private actor RecordingDockReloader: DockReloading {
     private(set) var reloadCount = 0
 
@@ -899,6 +1116,18 @@ private actor RecordingDockReloader: DockReloading {
 
     func reloadsPerformed() -> Int {
         reloadCount
+    }
+}
+
+private actor EventRecordingDockReloader: DockReloading {
+    private let events: ManualRefreshEventRecorder
+
+    init(events: ManualRefreshEventRecorder) {
+        self.events = events
+    }
+
+    func reload() async throws {
+        await events.record(.reloaded)
     }
 }
 

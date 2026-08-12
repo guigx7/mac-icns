@@ -242,10 +242,10 @@ final class AppState: ObservableObject {
             return false
         }
         mappings = repairedMappings
-        saveMappings()
+        let didPersistMappings = saveMappings()
         await synchronizeFailureDetails(for: repairedMappings)
         await monitor.start(mappings: mappings)
-        return true
+        return didPersistMappings
     }
 
     func removeMappings(at offsets: IndexSet) {
@@ -347,7 +347,8 @@ final class AppState: ObservableObject {
         await monitor.start(mappings: mappings)
     }
 
-    private func saveMappings() {
+    @discardableResult
+    private func saveMappings() -> Bool {
         let prunedMappings = eligibilityPruner.prune(mappings)
         let retainedIDs = Set(prunedMappings.map(\.id))
         mappings = prunedMappings
@@ -355,9 +356,11 @@ final class AppState: ObservableObject {
         do {
             try repository.save(mappings)
             persistenceError = nil
+            return true
         } catch {
             persistenceError = "Could not save mappings."
             recordDiagnostic("Could not save mappings: \(error.localizedDescription)")
+            return false
         }
     }
 
