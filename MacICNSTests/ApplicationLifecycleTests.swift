@@ -8,9 +8,14 @@ private final class MiniaturizedWindow: NSWindow {
 }
 
 @MainActor
+private final class KeyCapableWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+}
+
+@MainActor
 final class ApplicationLifecycleTests: XCTestCase {
     func testStatusLevelWindowDoesNotCountAsUserFacing() {
-        let statusWindow = NSWindow(
+        let statusWindow = KeyCapableWindow(
             contentRect: NSRect(x: 0, y: 0, width: 20, height: 20),
             styleMask: .borderless,
             backing: .buffered,
@@ -19,6 +24,13 @@ final class ApplicationLifecycleTests: XCTestCase {
         statusWindow.level = .statusBar
         statusWindow.orderFront(nil)
         defer { statusWindow.orderOut(nil) }
+
+        XCTAssertTrue(statusWindow.isVisible)
+        XCTAssertFalse(statusWindow.isMiniaturized)
+        let window: NSWindow = statusWindow
+        XCTAssertFalse(window is NSPanel)
+        XCTAssertTrue(statusWindow.canBecomeKey)
+        XCTAssertEqual(statusWindow.level, .statusBar)
 
         XCTAssertFalse(
             ApplicationWindowVisibility.hasVisibleUserFacingWindow(in: [statusWindow])
