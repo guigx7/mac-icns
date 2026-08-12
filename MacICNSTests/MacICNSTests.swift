@@ -110,8 +110,9 @@ final class MacICNSTests: XCTestCase {
         var mapping = fixture.mapping
         mapping.status = .restartRequired
         let runningChecker = MutableRunningChecker(values: ["com.example.Target": true])
+        let repository = MemoryMappingRepository([mapping])
         let appState = AppState(
-            repository: MemoryMappingRepository([mapping]),
+            repository: repository,
             repairCoordinator: RepairCoordinator(
                 applicationRunningChecker: runningChecker,
                 applier: LifecycleApplier()
@@ -120,10 +121,13 @@ final class MacICNSTests: XCTestCase {
             applicationTerminationObserver: NoopTerminationObserver()
         )
         appState.loadMappings()
+        try await Task.sleep(for: .milliseconds(50))
+        let saveCount = repository.saveCount
 
         await appState.applicationDidTerminate(bundleIdentifier: "com.example.Target")
 
         XCTAssertEqual(appState.mappings.first?.status, .restartRequired)
+        XCTAssertEqual(repository.saveCount, saveCount)
     }
 
     @MainActor
@@ -132,17 +136,104 @@ final class MacICNSTests: XCTestCase {
         defer { fixture.remove() }
         var mapping = fixture.mapping
         mapping.status = .restartRequired
+        let repository = MemoryMappingRepository([mapping])
         let appState = AppState(
-            repository: MemoryMappingRepository([mapping]),
+            repository: repository,
             repairCoordinator: RepairCoordinator(applier: LifecycleApplier()),
             applicationRunningChecker: MutableRunningChecker(values: [:]),
             applicationTerminationObserver: NoopTerminationObserver()
         )
         appState.loadMappings()
+        let saveCount = repository.saveCount
 
         await appState.applicationDidTerminate(bundleIdentifier: "com.example.Other")
 
         XCTAssertEqual(appState.mappings.first?.status, .restartRequired)
+        XCTAssertEqual(repository.saveCount, saveCount)
+    }
+
+    @MainActor
+    func testTerminationRevalidatesMappingIdentitiesAfterInterleavedDeletion() async throws {
+        let targetFixture = try MappingFixture(bundleIdentifier: "com.example.Target")
+        let unrelatedFixture = try MappingFixture(bundleIdentifier: "com.example.Other")
+        defer {
+            targetFixture.remove()
+            unrelatedFixture.remove()
+        }
+        var target = targetFixture.mapping
+        target.status = .restartRequired
+        var unrelated = unrelatedFixture.mapping
+        unrelated.status = .restartRequired
+        let repository = MemoryMappingRepository([target, unrelated])
+        let runningChecker = BlockingRunningChecker()
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "same"),
+                applicationRunningChecker: ConstantRunningChecker(isRunning: true),
+                applier: LifecycleApplier()
+            ),
+            applicationRunningChecker: runningChecker,
+            applicationTerminationObserver: NoopTerminationObserver()
+        )
+        appState.loadMappings()
+
+        let termination = Task {
+            await appState.applicationDidTerminate(bundleIdentifier: "com.example.Target")
+        }
+        await runningChecker.waitUntilCheckStarts()
+        await appState.delete(target)
+        await runningChecker.finish(isRunning: false)
+        await termination.value
+
+        XCTAssertEqual(appState.mappings.map(\.id), [unrelated.id])
+        XCTAssertEqual(appState.mappings.first?.status, .restartRequired)
+        XCTAssertEqual(repository.savedMappings.map(\.id), [unrelated.id])
+        XCTAssertEqual(repository.savedMappings.first?.status, .restartRequired)
+    }
+
+    @MainActor
+    func testDisabledTargetTerminationDoesNotChangeRestartRequiredMapping() async throws {
+        let fixture = try MappingFixture(bundleIdentifier: "com.example.Target")
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.isEnabled = false
+        mapping.status = .restartRequired
+        let repository = MemoryMappingRepository([mapping])
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: LifecycleApplier()),
+            applicationRunningChecker: MutableRunningChecker(values: [:]),
+            applicationTerminationObserver: NoopTerminationObserver()
+        )
+        appState.loadMappings()
+        let saveCount = repository.saveCount
+
+        await appState.applicationDidTerminate(bundleIdentifier: "com.example.Target")
+
+        XCTAssertEqual(appState.mappings.first?.status, .restartRequired)
+        XCTAssertEqual(repository.saveCount, saveCount)
+    }
+
+    @MainActor
+    func testTargetTerminationDoesNotChangeNonRestartRequiredMapping() async throws {
+        let fixture = try MappingFixture(bundleIdentifier: "com.example.Target")
+        defer { fixture.remove() }
+        let mapping = fixture.mapping
+        let repository = MemoryMappingRepository([mapping])
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(applier: LifecycleApplier()),
+            applicationRunningChecker: MutableRunningChecker(values: [:]),
+            applicationTerminationObserver: NoopTerminationObserver()
+        )
+        appState.loadMappings()
+        let saveCount = repository.saveCount
+
+        await appState.applicationDidTerminate(bundleIdentifier: "com.example.Target")
+
+        XCTAssertEqual(appState.mappings.first?.status, .upToDate)
+        XCTAssertEqual(repository.saveCount, saveCount)
     }
 
     @MainActor
@@ -534,6 +625,35 @@ private actor MutableRunningChecker: ApplicationRunningChecking {
 
     func setRunning(_ isRunning: Bool, bundleIdentifier: String) {
         values[bundleIdentifier] = isRunning
+    }
+}
+
+private actor BlockingRunningChecker: ApplicationRunningChecking {
+    private var didStart = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var continuation: CheckedContinuation<Bool, Never>?
+
+    func isRunning(bundleIdentifier _: String) async -> Bool {
+        didStart = true
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+        return await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilCheckStarts() async {
+        guard !didStart else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func finish(isRunning: Bool) {
+        continuation?.resume(returning: isRunning)
+        continuation = nil
     }
 }
 

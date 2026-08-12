@@ -26,6 +26,27 @@ final class ApplicationRuntimeTests: XCTestCase {
         XCTAssertEqual(bundleIdentifier, "com.example.Target")
         runtime.stopObservingTerminations()
     }
+
+    func testStoppingTerminationObservationSuppressesLaterNotifications() async {
+        let center = NotificationCenter()
+        let runtime = WorkspaceApplicationRuntime(notificationCenter: center)
+        let unexpectedTermination = expectation(description: "unexpected termination")
+        unexpectedTermination.isInverted = true
+        runtime.startObservingTerminations { _ in
+            unexpectedTermination.fulfill()
+        }
+        runtime.stopObservingTerminations()
+
+        center.post(
+            name: NSWorkspace.didTerminateApplicationNotification,
+            object: nil,
+            userInfo: [NSWorkspace.applicationUserInfoKey: RuntimeApplicationStub(
+                bundleIdentifier: "com.example.Target"
+            )]
+        )
+
+        await fulfillment(of: [unexpectedTermination], timeout: 0.1)
+    }
 }
 
 private final class RuntimeApplicationStub: ApplicationIdentity {

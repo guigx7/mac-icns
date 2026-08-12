@@ -56,12 +56,16 @@ final class AppState: ObservableObject {
     }
 
     func applicationDidTerminate(bundleIdentifier: String) async {
-        let matchingIndices = mappings.indices.filter { index in
-            mappings[index].isEnabled
-                && mappings[index].status == .restartRequired
-                && mappings[index].bundleIdentifier == bundleIdentifier
-        }
-        guard !matchingIndices.isEmpty else {
+        let matchingIDs: Set<UUID> = Set(mappings.compactMap { mapping in
+            guard mapping.isEnabled,
+                  mapping.status == .restartRequired,
+                  mapping.bundleIdentifier == bundleIdentifier
+            else {
+                return nil
+            }
+            return mapping.id
+        })
+        guard !matchingIDs.isEmpty else {
             return
         }
         let isStillRunning = await applicationRunningChecker.isRunning(
@@ -71,7 +75,17 @@ final class AppState: ObservableObject {
             return
         }
 
-        for index in matchingIndices {
+        let currentMatchingIndices = mappings.indices.filter { index in
+            mappings[index].isEnabled
+                && mappings[index].status == .restartRequired
+                && mappings[index].bundleIdentifier == bundleIdentifier
+                && matchingIDs.contains(mappings[index].id)
+        }
+        guard !currentMatchingIndices.isEmpty else {
+            return
+        }
+
+        for index in currentMatchingIndices {
             mappings[index].status = .upToDate
         }
         mappingRevision += 1
