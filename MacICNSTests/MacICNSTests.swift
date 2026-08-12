@@ -717,6 +717,67 @@ final class MacICNSTests: XCTestCase {
         await firstRefresh.value
         XCTAssertFalse(appState.isRefreshingAll)
     }
+
+    @MainActor
+    func testManualRefreshSkipsDockReloadWhenAnotherMappingOperationIsBusy() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let applier = BlockingLifecycleApplier()
+        let reloader = RecordingDockReloader()
+        let appState = AppState(
+            repository: MemoryMappingRepository([mapping]),
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "same"),
+                applier: applier
+            ),
+            dockReloader: reloader
+        )
+        appState.loadMappings()
+
+        let applyTask = Task { await appState.apply(mapping) }
+        await applier.waitUntilApplyStarts()
+
+        await appState.refreshAll()
+
+        let reloadCount = await reloader.reloadsPerformed()
+        XCTAssertEqual(reloadCount, 0)
+
+        await applier.finishApply()
+        await applyTask.value
+    }
+
+    @MainActor
+    func testManualRefreshSkipsDockReloadWhenRepairResultIsStale() async throws {
+        let fixture = try MappingFixture()
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.appFingerprint = "same"
+        mapping.iconFingerprint = "same"
+        let applier = BlockingLifecycleApplier()
+        let reloader = RecordingDockReloader()
+        let repository = MemoryMappingRepository([mapping])
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                fingerprinting: ConstantFingerprinting(value: "same"),
+                applier: applier
+            ),
+            dockReloader: reloader
+        )
+        appState.loadMappings()
+
+        let refreshTask = Task { await appState.refreshAll() }
+        await applier.waitUntilApplyStarts()
+        appState.loadMappings()
+        await applier.finishApply()
+        await refreshTask.value
+
+        let reloadCount = await reloader.reloadsPerformed()
+        XCTAssertEqual(reloadCount, 0)
+    }
 }
 private struct EmptyMappingRepository: MappingRepository {
     func load() throws -> [IconMapping] { [] }

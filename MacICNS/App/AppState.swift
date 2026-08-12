@@ -210,7 +210,12 @@ final class AppState: ObservableObject {
         }
         isRefreshingAll = true
         defer { isRefreshingAll = false }
-        await refreshAll(reason: .manual, diagnosticMessage: "Manual icon refresh requested.")
+        guard await refreshAll(
+            reason: .manual,
+            diagnosticMessage: "Manual icon refresh requested."
+        ) else {
+            return
+        }
         do {
             try await dockReloader.reload()
             recordDiagnostic("Reloaded the Dock after manual icon refresh.")
@@ -220,9 +225,9 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func refreshAll(reason: RepairReason, diagnosticMessage: String) async {
+    private func refreshAll(reason: RepairReason, diagnosticMessage: String) async -> Bool {
         guard busyMappingIDs.isEmpty else {
-            return
+            return false
         }
         let snapshot = mappings
         let refreshedIDs = Set(snapshot.map(\.id))
@@ -234,12 +239,13 @@ final class AppState: ObservableObject {
         let repairedMappings = await repairCoordinator.repairAll(snapshot, reason: reason)
         guard mappingRevision == revision else {
             recordDiagnostic("Discarded a stale manual refresh result after mappings changed.")
-            return
+            return false
         }
         mappings = repairedMappings
         saveMappings()
         await synchronizeFailureDetails(for: repairedMappings)
         await monitor.start(mappings: mappings)
+        return true
     }
 
     func removeMappings(at offsets: IndexSet) {
