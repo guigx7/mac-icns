@@ -34,6 +34,10 @@ final class MacICNSTests: XCTestCase {
         XCTAssertEqual(MappingRowPresentation.changeIconLabel, "Change icon")
     }
 
+    func testRefreshIconsUsesTheSharedEnglishLabel() {
+        XCTAssertEqual(MappingListPresentation.refreshIconsLabel, "Refresh Icons")
+    }
+
     func testRestartRequiredPresentationUsesEnglishGuidance() {
         var mapping = IconMapping(
             applicationURL: URL(filePath: "/Applications/Example.app"),

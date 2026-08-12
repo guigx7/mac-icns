@@ -38,9 +38,10 @@ struct MacICNSApp: App {
             Button("Show MacICNS") {
                 focusMainWindow()
             }
-            Button("Refresh Icons") {
+            Button(MappingListPresentation.refreshIconsLabel) {
                 Task { await appState.refreshAll() }
             }
+            .disabled(appState.isRefreshingAll)
             Divider()
             Button("Quit") { NSApplication.shared.terminate(nil) }
         }

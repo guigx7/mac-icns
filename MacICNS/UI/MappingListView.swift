@@ -2,6 +2,10 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum MappingListPresentation {
+    static let refreshIconsLabel = "Refresh Icons"
+}
+
 struct MappingListView: View {
     @ObservedObject var appState: AppState
     @State private var isPresentingEditor = false
@@ -39,6 +43,11 @@ struct MappingListView: View {
             }
             .navigationTitle("MacICNS")
             .toolbar {
+                Button(MappingListPresentation.refreshIconsLabel, systemImage: "arrow.clockwise") {
+                    Task { await appState.refreshAll() }
+                }
+                .disabled(appState.isRefreshingAll)
+
                 Button("Add Mapping", systemImage: "plus") {
                     isPresentingEditor = true
                 }
