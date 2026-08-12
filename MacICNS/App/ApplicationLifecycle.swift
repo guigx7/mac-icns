@@ -1,6 +1,19 @@
 import AppKit
 
 @MainActor
+enum ApplicationWindowVisibility {
+    static func hasVisibleUserFacingWindow(in windows: [NSWindow]) -> Bool {
+        windows.contains { window in
+            window.isVisible
+                && !window.isMiniaturized
+                && !(window is NSPanel)
+                && window.level == .normal
+                && window.canBecomeKey
+        }
+    }
+}
+
+@MainActor
 final class ApplicationLifecycleController {
     typealias SetActivationPolicy = (NSApplication.ActivationPolicy) -> Bool
 
@@ -31,9 +44,9 @@ final class MacICNSApplicationDelegate: NSObject, NSApplicationDelegate {
     override init() {
         self.lifecycleController = ApplicationLifecycleController()
         self.visibleWindowProvider = {
-            NSApplication.shared.windows.contains { window in
-                window.isVisible && !window.isMiniaturized && !(window is NSPanel)
-            }
+            ApplicationWindowVisibility.hasVisibleUserFacingWindow(
+                in: NSApplication.shared.windows
+            )
         }
         super.init()
     }
