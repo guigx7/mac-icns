@@ -38,6 +38,8 @@
 		AF0000000000000000000002 /* ApplicationCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000012 /* ApplicationCatalog.swift */; };
 		B00000000000000000000001 /* MappingEligibilityPrunerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* MappingEligibilityPrunerTests.swift */; };
 		B00000000000000000000002 /* MappingEligibilityPruner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* MappingEligibilityPruner.swift */; };
+		C00000000000000000000001 /* ApplicationLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000011 /* ApplicationLifecycleTests.swift */; };
+		C00000000000000000000002 /* ApplicationLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000012 /* ApplicationLifecycle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,6 +91,8 @@
 		AF0000000000000000000012 /* ApplicationCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationCatalog.swift; sourceTree = "<group>"; };
 		B00000000000000000000011 /* MappingEligibilityPrunerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MappingEligibilityPrunerTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000012 /* MappingEligibilityPruner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MappingEligibilityPruner.swift; sourceTree = "<group>"; };
+		C00000000000000000000011 /* ApplicationLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLifecycleTests.swift; sourceTree = "<group>"; };
+		C00000000000000000000012 /* ApplicationLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLifecycle.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -144,6 +148,7 @@
 				AE0000000000000000000011 /* ApplicationEligibilityServiceTests.swift */,
 				AF0000000000000000000011 /* ApplicationCatalogTests.swift */,
 				B00000000000000000000011 /* MappingEligibilityPrunerTests.swift */,
+				C00000000000000000000011 /* ApplicationLifecycleTests.swift */,
 			);
 			path = MacICNSTests;
 			sourceTree = "<group>";
@@ -171,6 +176,7 @@
 				AA0000000000000000000014 /* AppIcon.icns */,
 				A10000000000000000000011 /* MacICNSApp.swift */,
 				A40000000000000000000013 /* AppState.swift */,
+				C00000000000000000000012 /* ApplicationLifecycle.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -332,6 +338,7 @@
 				A80000000000000000000003 /* MappingFileMonitor.swift in Sources */,
 				A90000000000000000000003 /* LoginItemService.swift in Sources */,
 				B00000000000000000000002 /* MappingEligibilityPruner.swift in Sources */,
+				C00000000000000000000002 /* ApplicationLifecycle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -349,6 +356,7 @@
 				AE0000000000000000000001 /* ApplicationEligibilityServiceTests.swift in Sources */,
 				AF0000000000000000000001 /* ApplicationCatalogTests.swift in Sources */,
 				B00000000000000000000001 /* MappingEligibilityPrunerTests.swift in Sources */,
+				C00000000000000000000001 /* ApplicationLifecycleTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
