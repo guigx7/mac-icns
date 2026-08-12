@@ -13,6 +13,8 @@ final class AppState: ObservableObject {
     private let repairCoordinator: RepairCoordinator
     private let eligibilityPruner: MappingEligibilityPruner
     private let diagnosticLogger: DiagnosticLogger
+    private let applicationRunningChecker: any ApplicationRunningChecking
+    private let applicationTerminationObserver: any ApplicationTerminationObserving
     private var hasLaunched = false
     private var mappingRevision = 0
     private lazy var monitor = MappingFileMonitor(repairCoordinator: repairCoordinator) { [weak self] mapping in
@@ -28,12 +30,16 @@ final class AppState: ObservableObject {
         repository: any MappingRepository = JSONMappingRepository(),
         repairCoordinator: RepairCoordinator = RepairCoordinator(applier: DirectIconApplier()),
         eligibilityPruner: MappingEligibilityPruner = MappingEligibilityPruner(),
-        diagnosticLogger: DiagnosticLogger = DiagnosticLogger()
+        diagnosticLogger: DiagnosticLogger = DiagnosticLogger(),
+        applicationRunningChecker: any ApplicationRunningChecking = WorkspaceApplicationRuntime.shared,
+        applicationTerminationObserver: any ApplicationTerminationObserving = WorkspaceApplicationRuntime.shared
     ) {
         self.repository = repository
         self.repairCoordinator = repairCoordinator
         self.eligibilityPruner = eligibilityPruner
         self.diagnosticLogger = diagnosticLogger
+        self.applicationRunningChecker = applicationRunningChecker
+        self.applicationTerminationObserver = applicationTerminationObserver
     }
 
     func launch() {
@@ -41,7 +47,36 @@ final class AppState: ObservableObject {
             return
         }
         hasLaunched = true
+        applicationTerminationObserver.startObservingTerminations { [weak self] bundleIdentifier in
+            Task { @MainActor in
+                await self?.applicationDidTerminate(bundleIdentifier: bundleIdentifier)
+            }
+        }
         loadMappings()
+    }
+
+    func applicationDidTerminate(bundleIdentifier: String) async {
+        let matchingIndices = mappings.indices.filter { index in
+            mappings[index].isEnabled
+                && mappings[index].status == .restartRequired
+                && mappings[index].bundleIdentifier == bundleIdentifier
+        }
+        guard !matchingIndices.isEmpty else {
+            return
+        }
+        let isStillRunning = await applicationRunningChecker.isRunning(
+            bundleIdentifier: bundleIdentifier
+        )
+        guard !isStillRunning else {
+            return
+        }
+
+        for index in matchingIndices {
+            mappings[index].status = .upToDate
+        }
+        mappingRevision += 1
+        saveMappings()
+        recordDiagnostic("Application restart completed for \(bundleIdentifier).")
     }
 
     func loadMappings() {

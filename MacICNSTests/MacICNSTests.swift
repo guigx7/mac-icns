@@ -79,6 +79,87 @@ final class MacICNSTests: XCTestCase {
     }
 
     @MainActor
+    func testTargetTerminationClearsRestartRequiredWhenNoProcessRemains() async throws {
+        let fixture = try MappingFixture(bundleIdentifier: "com.example.Target")
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.status = .restartRequired
+        let repository = MemoryMappingRepository([mapping])
+        let runningChecker = MutableRunningChecker(values: ["com.example.Target": false])
+        let appState = AppState(
+            repository: repository,
+            repairCoordinator: RepairCoordinator(
+                applicationRunningChecker: runningChecker,
+                applier: LifecycleApplier()
+            ),
+            applicationRunningChecker: runningChecker,
+            applicationTerminationObserver: NoopTerminationObserver()
+        )
+        appState.loadMappings()
+
+        await appState.applicationDidTerminate(bundleIdentifier: "com.example.Target")
+
+        XCTAssertEqual(appState.mappings.first?.status, .upToDate)
+        XCTAssertEqual(repository.savedMappings.first?.status, .upToDate)
+    }
+
+    @MainActor
+    func testTargetTerminationKeepsRestartRequiredWhileAnotherProcessRuns() async throws {
+        let fixture = try MappingFixture(bundleIdentifier: "com.example.Target")
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.status = .restartRequired
+        let runningChecker = MutableRunningChecker(values: ["com.example.Target": true])
+        let appState = AppState(
+            repository: MemoryMappingRepository([mapping]),
+            repairCoordinator: RepairCoordinator(
+                applicationRunningChecker: runningChecker,
+                applier: LifecycleApplier()
+            ),
+            applicationRunningChecker: runningChecker,
+            applicationTerminationObserver: NoopTerminationObserver()
+        )
+        appState.loadMappings()
+
+        await appState.applicationDidTerminate(bundleIdentifier: "com.example.Target")
+
+        XCTAssertEqual(appState.mappings.first?.status, .restartRequired)
+    }
+
+    @MainActor
+    func testUnrelatedTerminationDoesNotChangeRestartRequiredMapping() async throws {
+        let fixture = try MappingFixture(bundleIdentifier: "com.example.Target")
+        defer { fixture.remove() }
+        var mapping = fixture.mapping
+        mapping.status = .restartRequired
+        let appState = AppState(
+            repository: MemoryMappingRepository([mapping]),
+            repairCoordinator: RepairCoordinator(applier: LifecycleApplier()),
+            applicationRunningChecker: MutableRunningChecker(values: [:]),
+            applicationTerminationObserver: NoopTerminationObserver()
+        )
+        appState.loadMappings()
+
+        await appState.applicationDidTerminate(bundleIdentifier: "com.example.Other")
+
+        XCTAssertEqual(appState.mappings.first?.status, .restartRequired)
+    }
+
+    @MainActor
+    func testLaunchingTwiceStartsTerminationObservationOnce() {
+        let observer = RecordingTerminationObserver()
+        let appState = AppState(
+            repository: EmptyMappingRepository(),
+            applicationTerminationObserver: observer
+        )
+
+        appState.launch()
+        appState.launch()
+
+        XCTAssertEqual(observer.startCount, 1)
+    }
+
+    @MainActor
     func testLaunchSilentlyPersistsOnlySupportedMappings() {
         let compatibleURL = URL(filePath: "/Applications/Compatible.app")
         let protectedURL = URL(filePath: "/Applications/Protected.app")
@@ -440,6 +521,44 @@ private struct ConstantRunningChecker: ApplicationRunningChecking {
     }
 }
 
+private actor MutableRunningChecker: ApplicationRunningChecking {
+    private var values: [String: Bool]
+
+    init(values: [String: Bool]) {
+        self.values = values
+    }
+
+    func isRunning(bundleIdentifier: String) async -> Bool {
+        values[bundleIdentifier] ?? false
+    }
+
+    func setRunning(_ isRunning: Bool, bundleIdentifier: String) {
+        values[bundleIdentifier] = isRunning
+    }
+}
+
+@MainActor
+private final class NoopTerminationObserver: ApplicationTerminationObserving {
+    func startObservingTerminations(
+        _ handler: @escaping @MainActor @Sendable (String) -> Void
+    ) {}
+
+    func stopObservingTerminations() {}
+}
+
+@MainActor
+private final class RecordingTerminationObserver: ApplicationTerminationObserving {
+    private(set) var startCount = 0
+
+    func startObservingTerminations(
+        _ handler: @escaping @MainActor @Sendable (String) -> Void
+    ) {
+        startCount += 1
+    }
+
+    func stopObservingTerminations() {}
+}
+
 private actor IconReplacementApplier: IconApplying {
     private(set) var appliedIconURLs: [URL] = []
     private let failApply: Bool
@@ -464,7 +583,7 @@ private struct MappingFixture {
     let mapping: IconMapping
     let replacementIconURL: URL
 
-    init() throws {
+    init(bundleIdentifier: String? = nil) throws {
         directory = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString, directoryHint: .isDirectory)
         let applicationURL = directory.appending(path: "Example.app", directoryHint: .isDirectory)
@@ -473,7 +592,11 @@ private struct MappingFixture {
         try FileManager.default.createDirectory(at: applicationURL, withIntermediateDirectories: true)
         try Data("icon".utf8).write(to: iconURL)
         try Data("replacement".utf8).write(to: replacementIconURL)
-        mapping = IconMapping(applicationURL: applicationURL, bundleIdentifier: nil, iconURL: iconURL)
+        mapping = IconMapping(
+            applicationURL: applicationURL,
+            bundleIdentifier: bundleIdentifier,
+            iconURL: iconURL
+        )
     }
 
     func remove() {
