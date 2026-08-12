@@ -139,11 +139,16 @@ private struct MappingRowView: View {
                 Text(mapping.iconURL.lastPathComponent)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                Text(statusName)
+                Text(MappingRowPresentation.statusName(for: mapping))
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(statusColor)
-                if let failureMessage, mapping.isEnabled {
-                    Text(failureMessage)
+                    .foregroundStyle(
+                        MappingRowPresentation.isAttentionStatus(mapping) ? .orange : .secondary
+                    )
+                if let statusMessage = MappingRowPresentation.statusMessage(
+                    for: mapping,
+                    failureMessage: failureMessage
+                ) {
+                    Text(statusMessage)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -199,14 +204,6 @@ private struct MappingRowView: View {
         .padding(.vertical, 8)
     }
 
-    private var statusName: String {
-        mapping.isEnabled ? mapping.status.displayName : "Disabled"
-    }
-
-    private var statusColor: Color {
-        mapping.isEnabled && mapping.status == .needsPermission ? .orange : .secondary
-    }
-
     private func iconPreview(_ image: NSImage, accessibilityLabel: String) -> some View {
         Image(nsImage: image)
             .resizable()
@@ -218,9 +215,27 @@ private struct MappingRowView: View {
 
 enum MappingRowPresentation {
     static let changeIconLabel = "Change icon"
+    static let restartRequiredMessage = "Quit and reopen this app to refresh its Dock icon."
 
     static func toggleLabel(isEnabled: Bool) -> String {
         isEnabled ? "Enabled" : "Disabled"
+    }
+
+    static func statusName(for mapping: IconMapping) -> String {
+        mapping.isEnabled ? mapping.status.displayName : "Disabled"
+    }
+
+    static func statusMessage(
+        for mapping: IconMapping,
+        failureMessage: String?
+    ) -> String? {
+        guard mapping.isEnabled else { return nil }
+        return mapping.status == .restartRequired ? restartRequiredMessage : failureMessage
+    }
+
+    static func isAttentionStatus(_ mapping: IconMapping) -> Bool {
+        mapping.isEnabled
+            && (mapping.status == .needsPermission || mapping.status == .restartRequired)
     }
 }
 

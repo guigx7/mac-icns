@@ -34,6 +34,35 @@ final class MacICNSTests: XCTestCase {
         XCTAssertEqual(MappingRowPresentation.changeIconLabel, "Change icon")
     }
 
+    func testRestartRequiredPresentationUsesEnglishGuidance() {
+        var mapping = IconMapping(
+            applicationURL: URL(filePath: "/Applications/Example.app"),
+            bundleIdentifier: "com.example.App",
+            iconURL: URL(filePath: "/tmp/Example.icns")
+        )
+        mapping.status = .restartRequired
+
+        XCTAssertEqual(MappingRowPresentation.statusName(for: mapping), "Restart required")
+        XCTAssertEqual(
+            MappingRowPresentation.statusMessage(for: mapping, failureMessage: nil),
+            "Quit and reopen this app to refresh its Dock icon."
+        )
+        XCTAssertTrue(MappingRowPresentation.isAttentionStatus(mapping))
+    }
+
+    func testDisabledMappingHidesRestartGuidance() {
+        var mapping = IconMapping(
+            applicationURL: URL(filePath: "/Applications/Example.app"),
+            bundleIdentifier: "com.example.App",
+            iconURL: URL(filePath: "/tmp/Example.icns")
+        )
+        mapping.status = .restartRequired
+        mapping.isEnabled = false
+
+        XCTAssertEqual(MappingRowPresentation.statusName(for: mapping), "Disabled")
+        XCTAssertNil(MappingRowPresentation.statusMessage(for: mapping, failureMessage: nil))
+    }
+
     func testFSEventPathDecoderReadsCStringVector() {
         let first = strdup("/Applications/Spotify.app")!
         let second = strdup("/Applications/Spotify.app/Contents/Info.plist")!
