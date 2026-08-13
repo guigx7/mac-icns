@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 enum MappingListPresentation {
     static let refreshIconsLabel = "Refresh Icons"
+    static let addMappingLabel = "Add Mapping"
+    static let primaryToolbarActionLabels = [refreshIconsLabel, addMappingLabel]
 }
 
 struct MappingListView: View {
@@ -43,13 +45,15 @@ struct MappingListView: View {
             }
             .navigationTitle("MacICNS")
             .toolbar {
-                Button(MappingListPresentation.refreshIconsLabel, systemImage: "arrow.clockwise") {
-                    Task { await appState.refreshAll() }
-                }
-                .disabled(appState.isRefreshingAll)
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button(MappingListPresentation.refreshIconsLabel, systemImage: "arrow.clockwise") {
+                        Task { await appState.refreshAll() }
+                    }
+                    .disabled(appState.isRefreshingAll)
 
-                Button("Add Mapping", systemImage: "plus") {
-                    isPresentingEditor = true
+                    Button(MappingListPresentation.addMappingLabel, systemImage: "plus") {
+                        isPresentingEditor = true
+                    }
                 }
             }
             .sheet(isPresented: $isPresentingEditor) {

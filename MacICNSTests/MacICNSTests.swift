@@ -38,6 +38,13 @@ final class MacICNSTests: XCTestCase {
         XCTAssertEqual(MappingListPresentation.refreshIconsLabel, "Refresh Icons")
     }
 
+    func testPrimaryToolbarActionsPutRefreshBeforeAddingAMapping() {
+        XCTAssertEqual(
+            MappingListPresentation.primaryToolbarActionLabels,
+            ["Refresh Icons", "Add Mapping"]
+        )
+    }
+
     func testRestartRequiredPresentationUsesEnglishGuidance() {
         var mapping = IconMapping(
             applicationURL: URL(filePath: "/Applications/Example.app"),
