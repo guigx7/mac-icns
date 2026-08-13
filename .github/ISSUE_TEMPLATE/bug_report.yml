@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a reproducible MacICNS problem.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, signing data, private keys, personal paths,
+        mapping files, or unsanitized diagnostics. For security concerns, follow SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: MacICNS version
+      description: For example, 1.0.1.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: For example, macOS 14.6.
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Mac architecture
+      options:
+        - Apple Silicon (arm64)
+        - Intel (unsupported)
+        - I do not know
+    validations:
+      required: true
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Install method
+      options:
+        - DMG
+        - ZIP
+        - Homebrew
+        - Built from source
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open MacICNS
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics or screenshots (optional)
+      description: Remove personal paths, app mappings, credentials, and signing data before posting.
