@@ -126,7 +126,7 @@ git commit -m "docs: add distribution instructions"
 **Files:**
 - Create outside this repository: `guigx7/homebrew-tap/Casks/macicns.rb`
 - Create outside this repository: `guigx7/homebrew-tap/README.md`
-- Test: `brew audit --cask --new macicns` in a local clone of the tap.
+- Test: `brew audit --cask --new --tap=guigx7/tap macicns` after the tap is published and installed locally.
 
 **Interfaces:**
 - Consumes: the finalized `MacICNS-v1.0.1-macos-arm64.zip` GitHub Release asset URL and SHA-256 from `SHA256SUMS.txt`.
@@ -138,10 +138,12 @@ Use GitHub CLI to create public repository `guigx7/homebrew-tap` with the curren
 
 - [ ] **Step 2: Add the initial failing Cask audit case**
 
-Create `Casks/macicns.rb` with the Cask skeleton and an intentionally absent `sha256` field. Run:
+Create `Casks/macicns.rb` with the Cask skeleton and an intentionally absent `sha256` field. Validate the Ruby syntax, then run the Homebrew audit after publishing the tap:
 
 ```bash
-brew audit --cask --new Casks/macicns.rb
+ruby -c Casks/macicns.rb
+brew tap guigx7/tap
+brew audit --cask --new --tap=guigx7/tap macicns
 ```
 
 Expected: FAIL because `sha256` is mandatory for the immutable versioned URL.
@@ -179,7 +181,7 @@ Replace the placeholder only with the locally calculated archive checksum. Keep 
 Run:
 
 ```bash
-brew audit --cask --new Casks/macicns.rb
+brew audit --cask --new --tap=guigx7/tap macicns
 brew install --cask guigx7/tap/macicns
 plutil -extract CFBundleShortVersionString raw /Applications/MacICNS.app/Contents/Info.plist
 ```
