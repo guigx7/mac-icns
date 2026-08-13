@@ -2,6 +2,7 @@
 .superpowers/
 build/
 DerivedData/
+dist/
 .DS_Store
 *.xcworkspace/
 xcuserdata/
